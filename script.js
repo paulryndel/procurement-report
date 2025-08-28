@@ -45,6 +45,7 @@ let currentSort = { key: 'code', direction: 'asc' };
 let selectedForGraph = [];
 let chartInstance = null;
 let priceChartInstance = null; // New chart instance for price graph
+let filterNegativeMrp = false; // For the new (-)MRP filter
 
 // --- Event Listeners ---
 document.getElementById('excel-upload').addEventListener('change', handleProcurementFile);
@@ -55,6 +56,7 @@ document.getElementById('vendor-filter-btn').addEventListener('click', () => tog
 document.getElementById('part-search-input').addEventListener('input', () => filterList('part-search-input', 'part-list'));
 document.getElementById('vendor-search-input').addEventListener('input', () => filterList('vendor-search-input', 'vendor-list'));
 document.getElementById('need-stock-filter').addEventListener('change', applyFiltersAndRender);
+document.getElementById('mrp-filter-btn').addEventListener('click', toggleNegativeMrpFilter);
 document.getElementById('clear-filters-btn').addEventListener('click', clearFiltersAndSort);
 document.getElementById('print-btn').addEventListener('click', printReport);
 
@@ -131,10 +133,12 @@ function handleMrpFile(event) {
 function applyFiltersAndRender() {
     let filteredRawData = rawData;
 
+    // Filter by selected vendors
     if (selectedVendors.length > 0) {
         filteredRawData = filteredRawData.filter(row => selectedVendors.includes(row['Vendor Name']));
     }
 
+    // Filter by selected parts
     if (selectedParts.length > 0) {
         filteredRawData = filteredRawData.filter(row => {
             const partCode = String(row['Product Code'] || '').trim();
@@ -143,8 +147,21 @@ function applyFiltersAndRender() {
         });
     }
 
+    // Process the data after basic filters
     allProducts = processProcurementData(filteredRawData);
     
+    // Apply Negative MRP Filter
+    if (filterNegativeMrp) {
+        const filteredCodes = Object.keys(allProducts).filter(code => {
+            const productMrp = mrpData[code] || { mrpBalance: 0 };
+            return productMrp.mrpBalance < 0;
+        });
+        const tempFilteredProducts = {};
+        filteredCodes.forEach(code => tempFilteredProducts[code] = allProducts[code]);
+        allProducts = tempFilteredProducts;
+    }
+    
+    // Apply "Need Stock?" dropdown filter
     const needStockFilter = document.getElementById('need-stock-filter').value;
     if (needStockFilter !== 'all') {
         const filteredCodes = Object.keys(allProducts).filter(code => {
@@ -285,9 +302,9 @@ function processMrpData(data) {
             (parseFloat(prev['ThisTimeBalance']) || Infinity) < (parseFloat(curr['ThisTimeBalance']) || Infinity) ? prev : curr
         );
         finalMrpData[productCode] = {
-            mrpBalance: parseFloat(minRow['MRPBalance']) || 0,
-            storeStock: parseFloat(minRow['StockOnHand']) || 0,
-            woPo: (parseFloat(minRow['AllWO']) || 0) + (parseFloat(minRow['AllPO']) || 0)
+            mrpBalance: Math.round(parseFloat(minRow['MRPBalance']) || 0),
+            storeStock: Math.round(parseFloat(minRow['StockOnHand']) || 0),
+            woPo: Math.round((parseFloat(minRow['AllWO']) || 0) + (parseFloat(minRow['AllPO']) || 0))
         };
     }
     return finalMrpData;
@@ -349,6 +366,13 @@ function sortData() {
 }
 
 // --- UI and Helper Functions ---
+function toggleNegativeMrpFilter() {
+    filterNegativeMrp = !filterNegativeMrp;
+    const btn = document.getElementById('mrp-filter-btn');
+    btn.classList.toggle('active', filterNegativeMrp);
+    applyFiltersAndRender();
+}
+
 function loadMoreData() {
     const tableBody = document.getElementById('product-table-body');
     const start = displayedCount;
@@ -550,6 +574,10 @@ function clearFiltersAndSort() {
     selectedVendors = [];
     document.getElementById('need-stock-filter').value = 'all';
     
+    // Reset MRP filter state
+    filterNegativeMrp = false;
+    document.getElementById('mrp-filter-btn').classList.remove('active');
+
     currentSort = { key: 'code', direction: 'asc' };
 
     document.querySelectorAll('.filter-list input[type="checkbox"]').forEach(cb => cb.checked = false);
