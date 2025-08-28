@@ -149,8 +149,8 @@ function applyFiltersAndRender() {
     if (needStockFilter !== 'all') {
         const filteredCodes = Object.keys(allProducts).filter(code => {
             const p = allProducts[code];
-            const productMrp = mrpData[code] || { storeStock: 0 };
-            const needStock = (productMrp.storeStock - p.lowLimit <= 0) ? "YES" : "NO";
+            const productMrp = mrpData[code] || { mrpBalance: 0 };
+            const needStock = (productMrp.mrpBalance <= p.lowLimit) ? "YES" : "NO";
             return needStock === needStockFilter;
         });
         const tempFilteredProducts = {};
@@ -311,14 +311,26 @@ function sortData() {
             valB = productB.years[year] ? productB.years[year].qty : 0;
         }
         else if (key === 'needStock' || key === 'pcsNeeded') {
-            const mrpA = mrpData[a] || { storeStock: 0 };
-            const mrpB = mrpData[b] || { storeStock: 0 };
-            const needA = (mrpA.storeStock - productA.lowLimit <= 0) ? "YES" : "NO";
-            const needB = (mrpB.storeStock - productB.lowLimit <= 0) ? "YES" : "NO";
-            if (key === 'needStock') { valA = needA; valB = needB; }
-            else {
-                valA = (needA === "YES") ? productA.lowLimit - mrpA.storeStock : 0;
-                valB = (needB === "YES") ? productB.lowLimit - mrpB.storeStock : 0;
+            const mrpA = mrpData[a] || { mrpBalance: 0, storeStock: 0 };
+            const mrpB = mrpData[b] || { mrpBalance: 0, storeStock: 0 };
+            
+            const needA = (mrpA.mrpBalance <= productA.lowLimit) ? "YES" : "NO";
+            const needB = (mrpB.mrpBalance <= productB.lowLimit) ? "YES" : "NO";
+            
+            if (key === 'needStock') {
+                valA = needA;
+                valB = needB;
+            } else { // key === 'pcsNeeded'
+                if (needA === "YES") {
+                    valA = productA.safeStock - mrpA.mrpBalance;
+                } else {
+                    valA = productA.safeStock - mrpA.storeStock;
+                }
+                if (needB === "YES") {
+                    valB = productB.safeStock - mrpB.mrpBalance;
+                } else {
+                    valB = productB.safeStock - mrpB.storeStock;
+                }
             }
         } else {
             const mrpA = mrpData[a] || { mrpBalance: 0, storeStock: 0, woPo: 0 };
@@ -364,10 +376,17 @@ function appendRowsToTable(codesToRender) {
         
         const productMrp = mrpData[code] || { mrpBalance: 0, storeStock: 0, woPo: 0 };
 
-        const storeStock = productMrp.storeStock;
-        const lowLimit = p.lowLimit;
-        const needStock = (storeStock - lowLimit <= 0) ? "YES" : "NO";
-        const pcsNeeded = (needStock === "YES") ? lowLimit - storeStock : 0;
+        const { storeStock, mrpBalance } = productMrp;
+        const { lowLimit, safeStock } = p;
+
+        // New calculation logic
+        const needStock = (mrpBalance <= lowLimit) ? "YES" : "NO";
+        let pcsNeeded = 0;
+        if (needStock === "YES") {
+            pcsNeeded = safeStock - mrpBalance;
+        } else {
+            pcsNeeded = safeStock - storeStock;
+        }
         
         const highlightClass = (needStock === "YES") ? "highlight-red" : "";
 
@@ -378,9 +397,9 @@ function appendRowsToTable(codesToRender) {
             <td class="text-center">${p.years[2022].qty}</td><td class="text-center">${p.years[2023].qty}</td>
             <td class="text-center">${p.years[2024].qty}</td><td class="text-center">${p.years[2025].qty}</td>
             <td class="text-center font-bold bg-yellow-100">${p.total}</td>
-            <td class="text-center">${p.aveQty.toFixed(2)}</td><td class="text-center">${p.safeStock}</td>
-            <td class="text-center ${highlightClass}">${lowLimit}</td>
-            <td class="text-center">${productMrp.mrpBalance}</td>
+            <td class="text-center">${p.aveQty.toFixed(2)}</td><td class="text-center">${safeStock}</td>
+            <td class="text-center">${lowLimit}</td>
+            <td class="text-center ${highlightClass}">${mrpBalance}</td>
             <td class="text-center">${storeStock}</td>
             <td class="text-center">${productMrp.woPo}</td>
             <td class="text-center ${highlightClass}">${needStock}</td>
@@ -397,11 +416,16 @@ function updateSummaryBoxes() {
 
     allProductCodes.forEach(code => {
         const p = allProducts[code];
-        const productMrp = mrpData[code] || { storeStock: 0 };
-        const needStock = (productMrp.storeStock - p.lowLimit <= 0);
+        const productMrp = mrpData[code] || { mrpBalance: 0, storeStock: 0 };
+        
+        const needStock = (productMrp.mrpBalance <= p.lowLimit);
+        
         if (needStock) {
             itemsNeedStock++;
-            piecesNeedStock += (p.lowLimit - productMrp.storeStock);
+            const pcsNeeded = p.safeStock - productMrp.mrpBalance;
+            if (pcsNeeded > 0) {
+                piecesNeedStock += pcsNeeded;
+            }
             if (p.vendor) {
                 vendorsToOrder.add(p.vendor);
             }
