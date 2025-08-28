@@ -323,7 +323,7 @@ tbody tr:hover .sticky-col-1, tbody tr:hover .sticky-col-2 {
 .details-section {
     margin-top: 1rem;
     display: grid;
-    grid-template-columns: 2fr 1fr; /* 2/3 for graph, 1/3 for table */
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
     align-items: start;
 }
@@ -332,10 +332,11 @@ tbody tr:hover .sticky-col-1, tbody tr:hover .sticky-col-2 {
     padding: 1rem;
     border: 1px solid #e2e8f0;
     border-radius: 0.5rem;
-    height: 450px; /* Increased graph height */
+    height: 450px;
 }
 
 .details-table-container {
+    grid-column: 1 / -1; /* Span across all columns */
     padding: 1rem;
     border: 1px solid #e2e8f0;
     border-radius: 0.5rem;

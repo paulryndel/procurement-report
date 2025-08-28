@@ -44,6 +44,7 @@ let selectedVendors = [];
 let currentSort = { key: 'code', direction: 'asc' };
 let selectedForGraph = [];
 let chartInstance = null;
+let priceChartInstance = null; // New chart instance for price graph
 
 // --- Event Listeners ---
 document.getElementById('excel-upload').addEventListener('change', handleProcurementFile);
@@ -173,6 +174,20 @@ function applyFiltersAndRender() {
     updateGraphAndDetails();
 }
 
+/**
+ * NEW: Robustly parses a value that might be a number or a formatted string (e.g., currency).
+ * @param {*} value The value to parse.
+ * @returns {number} The parsed number, or 0 if parsing fails.
+ */
+function parseNumericValue(value) {
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'string') return 0;
+    // Remove currency symbols, commas, and whitespace, then parse
+    const cleanedValue = value.replace(/[^0-9.-]+/g, "");
+    return parseFloat(cleanedValue) || 0;
+}
+
+
 function processProcurementData(data) {
     const products = {};
     data.forEach(row => {
@@ -190,11 +205,24 @@ function processProcurementData(data) {
         }
 
         const year = date.getFullYear();
+        // UPDATED: Use the robust parsing function
+        const quantity = parseNumericValue(trimmedRow['Quantity']);
+        const unitPrice = parseNumericValue(trimmedRow['Unit Price']);
 
         if (!products[normalizedCode]) {
             products[normalizedCode] = {
-                name: trimmedRow['Product Name'], years: { 2020: 0, 2021: 0, 2022: 0, 2023: 0, 2024: 0, 2025: 0 },
-                total: 0, firstOrderDate: date, aveQty: 0, safeStock: 0, lowLimit: 0, vendor: trimmedRow['Vendor Name'], orderCount: 0
+                name: trimmedRow['Product Name'],
+                vendor: trimmedRow['Vendor Name'],
+                firstOrderDate: date,
+                lastOrderDate: date,
+                latestUnitPrice: unitPrice,
+                latestQuantity: quantity,
+                years: {
+                    2020: { qty: 0, priceSum: 0, count: 0 }, 2021: { qty: 0, priceSum: 0, count: 0 },
+                    2022: { qty: 0, priceSum: 0, count: 0 }, 2023: { qty: 0, priceSum: 0, count: 0 },
+                    2024: { qty: 0, priceSum: 0, count: 0 }, 2025: { qty: 0, priceSum: 0, count: 0 }
+                },
+                total: 0, aveQty: 0, safeStock: 0, lowLimit: 0, orderCount: 0
             };
         }
 
@@ -203,9 +231,19 @@ function processProcurementData(data) {
             products[normalizedCode].name = trimmedRow['Product Name'];
             products[normalizedCode].vendor = trimmedRow['Vendor Name'];
         }
+        if (date >= products[normalizedCode].lastOrderDate) {
+            products[normalizedCode].lastOrderDate = date;
+            products[normalizedCode].latestUnitPrice = unitPrice;
+            products[normalizedCode].latestQuantity = quantity;
+        }
 
         if (year >= 2020 && year <= 2025) {
-            products[normalizedCode].years[year] += (parseFloat(trimmedRow['Quantity']) || 0);
+            const yearData = products[normalizedCode].years[year];
+            yearData.qty += quantity;
+            if (unitPrice > 0) { // Only include orders with a price in average calculation
+                yearData.priceSum += unitPrice;
+                yearData.count++;
+            }
         }
         products[normalizedCode].orderCount++;
     });
@@ -213,7 +251,7 @@ function processProcurementData(data) {
     const currentYear = new Date().getFullYear();
     for (const code in products) {
         const p = products[code];
-        p.total = Object.values(p.years).reduce((sum, qty) => sum + qty, 0);
+        p.total = Object.values(p.years).reduce((sum, yearData) => sum + yearData.qty, 0);
         const firstOrderYear = p.firstOrderDate.getFullYear();
         if (p.total > 0) {
             const numYears = (currentYear - firstOrderYear) + 1;
@@ -224,6 +262,7 @@ function processProcurementData(data) {
     }
     return products;
 }
+
 
 function processMrpData(data) {
     const tempMrpData = {};
@@ -266,7 +305,11 @@ function sortData() {
 
         if (key === 'code') { valA = a; valB = b; }
         else if (key === 'name') { valA = productA.name; valB = productB.name; }
-        else if (key.startsWith('y20')) { valA = productA.years[key.substring(1)]; valB = productB.years[key.substring(1)]; }
+        else if (key.startsWith('y20')) { 
+            const year = key.substring(1);
+            valA = productA.years[year] ? productA.years[year].qty : 0;
+            valB = productB.years[year] ? productB.years[year].qty : 0;
+        }
         else if (key === 'needStock' || key === 'pcsNeeded') {
             const mrpA = mrpData[a] || { storeStock: 0 };
             const mrpB = mrpData[b] || { storeStock: 0 };
@@ -331,9 +374,9 @@ function appendRowsToTable(codesToRender) {
         row.innerHTML = `
             <td class="font-semibold sticky-col-1">${code}</td>
             <td title="${fullName}" class="sticky-col-2">${truncatedName}</td>
-            <td class="text-center">${p.years[2020]}</td><td class="text-center">${p.years[2021]}</td>
-            <td class="text-center">${p.years[2022]}</td><td class="text-center">${p.years[2023]}</td>
-            <td class="text-center">${p.years[2024]}</td><td class="text-center">${p.years[2025]}</td>
+            <td class="text-center">${p.years[2020].qty}</td><td class="text-center">${p.years[2021].qty}</td>
+            <td class="text-center">${p.years[2022].qty}</td><td class="text-center">${p.years[2023].qty}</td>
+            <td class="text-center">${p.years[2024].qty}</td><td class="text-center">${p.years[2025].qty}</td>
             <td class="text-center font-bold bg-yellow-100">${p.total}</td>
             <td class="text-center">${p.aveQty.toFixed(2)}</td><td class="text-center">${p.safeStock}</td>
             <td class="text-center ${highlightClass}">${lowLimit}</td>
@@ -518,7 +561,8 @@ function handleRowClick(event) {
 
 function updateGraphAndDetails() {
     const detailsSection = document.getElementById('details-section');
-    const ctx = document.getElementById('history-chart').getContext('2d');
+    const qtyCtx = document.getElementById('history-chart').getContext('2d');
+    const priceCtx = document.getElementById('price-history-chart').getContext('2d');
 
     if (selectedForGraph.length === 0) {
         detailsSection.classList.add('hidden');
@@ -527,73 +571,60 @@ function updateGraphAndDetails() {
 
     detailsSection.classList.remove('hidden');
 
-    if (chartInstance) {
-        chartInstance.destroy();
-    }
-
-    const datasets = selectedForGraph.map((code) => {
+    if (chartInstance) chartInstance.destroy();
+    if (priceChartInstance) priceChartInstance.destroy();
+    
+    const years = ['2020', '2021', '2022', '2023', '2024', '2025'];
+    
+    // --- Quantity Chart ---
+    const qtyDatasets = selectedForGraph.map((code) => {
         const product = allProducts[code];
-        const data = Object.values(product.years);
+        const data = years.map(year => product.years[year].qty);
         const color = `rgba(${Math.floor(Math.random() * 155) + 50}, ${Math.floor(Math.random() * 155) + 50}, ${Math.floor(Math.random() * 155) + 50}, 1)`;
-        
-        return {
-            label: code,
-            data: data,
-            borderColor: color,
-            backgroundColor: color.replace('1)', '0.2)'),
-            fill: true,
-            tension: 0.1,
-            pointBackgroundColor: color,
-            pointRadius: 5,
-            pointHoverRadius: 7
-        };
+        return { label: code, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.1, pointBackgroundColor: color, pointRadius: 5, pointHoverRadius: 7 };
     });
 
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: ['2020', '2021', '2022', '2023', '2024', '2025'],
-            datasets: datasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'top' },
-                title: { display: true, text: 'Yearly Purchase Quantity History' },
-                datalabels: {
-                    align: 'top',
-                    anchor: 'end',
-                    backgroundColor: (context) => context.dataset.borderColor,
-                    borderRadius: 4,
-                    color: 'white',
-                    font: {
-                        size: 8,
-                        weight: 'bold'
-                    },
-                    formatter: (value) => value > 0 ? value : '',
-                    padding: 4
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Quantity'
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Year'
-                    }
-                }
-            }
-        }
+    chartInstance = new Chart(qtyCtx, {
+        type: 'line', data: { labels: years, datasets: qtyDatasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Yearly Purchase Quantity History' }, datalabels: { align: 'top', anchor: 'end', backgroundColor: (context) => context.dataset.borderColor, borderRadius: 4, color: 'white', font: { size: 8, weight: 'bold' }, formatter: (value) => value > 0 ? value : '', padding: 4 } }, scales: { y: { beginAtZero: true, title: { display: true, text: 'Quantity' } }, x: { title: { display: true, text: 'Year' } } } }
+    });
+
+    // --- Price Chart ---
+    const priceDatasets = selectedForGraph.map((code) => {
+        const product = allProducts[code];
+        const data = years.map(year => {
+            const yearData = product.years[year];
+            return yearData.count > 0 ? (yearData.priceSum / yearData.count) : null;
+        });
+        const color = qtyDatasets.find(d => d.label === code).borderColor;
+        return { label: code, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.1, pointBackgroundColor: color, pointRadius: 5, pointHoverRadius: 7 };
     });
     
-    updateDetailsTable(datasets);
+    // Add horizontal line for latest price IF only one product is selected
+    if (selectedForGraph.length === 1) {
+        const product = allProducts[selectedForGraph[0]];
+        if (product && product.latestUnitPrice > 0) {
+            priceDatasets.push({
+                label: `Latest Price (${product.latestUnitPrice.toFixed(2)})`,
+                data: Array(years.length).fill(product.latestUnitPrice),
+                borderColor: '#ef4444',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                type: 'line',
+                fill: false,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                datalabels: { display: false }
+            });
+        }
+    }
+
+    priceChartInstance = new Chart(priceCtx, {
+        type: 'line', data: { labels: years, datasets: priceDatasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Yearly Average Unit Price History' }, datalabels: { align: 'top', anchor: 'end', backgroundColor: (context) => context.dataset.borderColor, borderRadius: 4, color: 'white', font: { size: 8, weight: 'bold' }, formatter: (value) => value ? value.toFixed(2) : '', padding: 4 } }, scales: { y: { beginAtZero: false, title: { display: true, text: 'Average Unit Price' } }, x: { title: { display: true, text: 'Year' } } } }
+    });
+
+    updateDetailsTable(qtyDatasets);
 }
 
 function updateDetailsTable(datasets) {
@@ -608,6 +639,15 @@ function updateDetailsTable(datasets) {
         const truncatedProductName = fullProductName.length > 20 ? fullProductName.substring(0, 20) + '...' : fullProductName;
         const fullVendorName = product.vendor || 'N/A';
         const truncatedVendorName = fullVendorName.length > 20 ? fullVendorName.substring(0, 20) + '...' : fullVendorName;
+        
+        // UPDATED: Format date to Month-Year (e.g., Jan-2025)
+        let formattedDate = 'N/A';
+        if (product.lastOrderDate) {
+            const d = product.lastOrderDate;
+            const month = d.toLocaleString('en-US', { month: 'short' });
+            const year = d.getFullYear();
+            formattedDate = `${month}-${year}`;
+        }
 
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -617,6 +657,9 @@ function updateDetailsTable(datasets) {
             <td title="${fullVendorName}">${truncatedVendorName}</td>
             <td class="text-center">${product.orderCount}</td>
             <td class="text-center">${product.total}</td>
+            <td class="text-center bg-yellow-100 font-semibold">${product.latestUnitPrice.toFixed(2)}</td>
+            <td class="text-center bg-yellow-100 font-semibold">${formattedDate}</td>
+            <td class="text-center bg-yellow-100 font-semibold">${product.latestQuantity}</td>
         `;
         tableBody.appendChild(row);
     });
