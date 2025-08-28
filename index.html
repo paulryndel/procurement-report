@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parts Stock Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="p-4">
+
+    <div id="loading-overlay">
+        <div class="loading-container">
+            <div class="loading-text">Processing Excel File...</div>
+            <div class="loading-bar-container">
+                <div class="loading-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto">
+        <header class="main-header rounded-lg flex justify-between items-center mb-4">
+            <div class="flex items-center">
+                <img src="https://i.postimg.cc/YStWH6PQ/Logo-LT.jpg" alt="Labtech Engineering Logo" class="logo">
+                <div class="ml-4">
+                    <h2 class="text-lg font-semibold">Procurement Department</h2>
+                    <p class="design-by-text">design app by : Paul Ryndel</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div id="datetime-clock" class="text-lg font-semibold text-white"></div>
+                <label for="excel-upload" class="file-upload-btn">
+                    Upload Procurement File
+                    <span id="procurement-status-icon" class="upload-status-icon">✔</span>
+                </label>
+                <input type="file" id="excel-upload" class="hidden" accept=".xlsx, .xls">
+                <label for="mrp-upload" class="file-upload-btn bg-green-600 hover:bg-green-700">
+                    Upload MRP File
+                    <span id="mrp-status-icon" class="upload-status-icon">✔</span>
+                </label>
+                <input type="file" id="mrp-upload" class="hidden" accept=".xlsx, .xls">
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+            <div class="header-box header-box-purple col-span-1 lg:col-span-1">
+                <p class="font-semibold">Items Need To Stock</p>
+                <p class="text-4xl font-bold" id="items-to-stock">0</p>
+            </div>
+            <div class="header-box header-box-pink col-span-1 lg:col-span-1">
+                <p class="font-semibold">Order Supplier</p>
+                <p class="text-4xl font-bold" id="order-supplier">0</p>
+            </div>
+             <div class="header-box col-span-1 lg:col-span-1">
+                <p class="font-semibold">Pieces Need To Stock</p>
+                <p class="text-4xl font-bold" id="pieces-to-stock">0</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg border col-span-1 lg:col-span-2 flex justify-between items-center">
+                <div>
+                    <p class="font-bold text-gray-700">PARTS STOCK - TRACKER</p>
+                    <p class="font-bold text-gray-700">MRP & STOCK BALANCE</p>
+                </div>
+                <button id="print-btn" class="print-btn">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                    Print Report
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg p-4">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button class="tab-btn active" data-tab="product-info">Product Information</button>
+                    <button class="tab-btn" data-tab="supplier-info">Supplier Information</button>
+                </nav>
+            </div>
+
+            <div class="mt-4">
+                <div id="product-info" class="tab-content">
+                    
+                    <div class="filter-controls">
+                        <div class="relative" id="part-filter-container">
+                            <button id="part-filter-btn" class="filter-btn">
+                                <span>Filter by Part / Name</span>
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="part-filter-dropdown" class="filter-dropdown hidden">
+                                <input type="text" id="part-search-input" placeholder="Search parts..." class="filter-search-input">
+                                <div id="part-list" class="filter-list"></div>
+                            </div>
+                        </div>
+                        <div class="relative" id="vendor-filter-container">
+                            <button id="vendor-filter-btn" class="filter-btn">
+                                <span>Filter by Vendor</span>
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="vendor-filter-dropdown" class="filter-dropdown hidden">
+                                <input type="text" id="vendor-search-input" placeholder="Search vendors..." class="filter-search-input">
+                                <div id="vendor-list" class="filter-list"></div>
+                            </div>
+                        </div>
+                        <div class="relative">
+                            <select id="need-stock-filter" class="filter-btn">
+                                <option value="all">Show All (Need Stock?)</option>
+                                <option value="YES">YES</option>
+                                <option value="NO">NO</option>
+                            </select>
+                        </div>
+                        <button id="clear-filters-btn" class="clear-filters-btn">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            Clear Filters
+                        </button>
+                    </div>
+                    <div id="selected-filters-container" class="selected-filters-container"></div>
+
+                    <p id="loading-message" class="text-gray-600 my-4">Please upload your Procurement file to view data.</p>
+                    
+                    <div id="capture-area">
+                        <div class="table-container">
+                            <table class="w-full text-sm" id="product-table">
+                                <thead>
+                                    <tr>
+                                        <th colspan="2" class="header-product-info sticky-col-1 sticky-row-1">Product Information</th>
+                                        <th colspan="7" class="header-qty-history sticky-row-1">QTY Purchased History</th>
+                                        <th colspan="3" class="header-calc-stock sticky-row-1">Calculated Stock</th>
+                                        <th colspan="3" class="header-mrp-info sticky-row-1">MRP Information</th>
+                                        <th colspan="2" class="header-key-factor sticky-row-1">KEY FACTOR</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="bg-green-100 sortable sticky-col-1 sticky-row-2" data-sort-key="code">Part Number</th>
+                                        <th class="bg-green-100 sortable sticky-col-2 sticky-row-2" data-sort-key="name">Product Name</th>
+                                        <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2020">2020</th>
+                                        <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2021">2021</th>
+                                        <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2022">2022</th>
+                                        <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2023">2023</th>
+                                        <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2024">2024</th>
+                                        <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2025">2025</th>
+                                        <th class="text-center font-bold bg-violet-100 sortable sticky-row-2" data-sort-key="total">Total</th>
+                                        <th class="bg-blue-100 sortable sticky-row-2" data-sort-key="aveQty">Ave. Qty</th>
+                                        <th class="bg-blue-100 sortable sticky-row-2" data-sort-key="safeStock">Safe Stock</th>
+                                        <th class="bg-blue-100 sortable sticky-row-2" data-sort-key="lowLimit">Low Limit</th>
+                                        <th class="bg-red-100 sortable sticky-row-2" data-sort-key="mrpBalance">MRPBalance</th>
+                                        <th class="bg-red-100 sortable sticky-row-2" data-sort-key="storeStock">Store Stock</th>
+                                        <th class="bg-red-100 sortable sticky-row-2" data-sort-key="woPo">WO+PO</th>
+                                        <th class="bg-amber-100 sortable sticky-row-2" data-sort-key="needStock">Need Stock?</th>
+                                        <th class="bg-amber-100 sortable sticky-row-2" data-sort-key="pcsNeeded">PCS Need</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="product-table-body">
+                                   </tbody>
+                            </table>
+                        </div>
+                        <div class="pt-4 flex justify-center">
+                            <button id="load-more-btn" class="file-upload-btn" style="display: none;">Load More Data</button>
+                        </div>
+
+                        <div id="details-section" class="details-section hidden">
+                            <div id="graph-container" class="graph-container">
+                                <canvas id="history-chart"></canvas>
+                            </div>
+                            <div id="details-table-container" class="details-table-container">
+                                <table class="w-full">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Product Code</th>
+                                            <th>Product Name</th>
+                                            <th>Vendor</th>
+                                            <th>Times Ordered</th>
+                                            <th>Total Ordered</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="details-table-body">
+                                        </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="supplier-info" class="tab-content" style="display: none;">
+                    <p>Supplier information will be displayed here.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
