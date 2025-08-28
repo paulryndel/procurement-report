@@ -228,11 +228,11 @@ function processProcurementData(data) {
 
         if (date < products[normalizedCode].firstOrderDate) {
             products[normalizedCode].firstOrderDate = date;
-            products[normalizedCode].name = trimmedRow['Product Name'];
-            products[normalizedCode].vendor = trimmedRow['Vendor Name'];
         }
         if (date >= products[normalizedCode].lastOrderDate) {
             products[normalizedCode].lastOrderDate = date;
+            products[normalizedCode].name = trimmedRow['Product Name'];
+            products[normalizedCode].vendor = trimmedRow['Vendor Name'];
             products[normalizedCode].latestUnitPrice = unitPrice;
             products[normalizedCode].latestQuantity = quantity;
         }
