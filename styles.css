@@ -397,7 +397,7 @@ tbody tr:hover .sticky-col-1, tbody tr:hover .sticky-col-2 {
 /* --- MRP Report Tab Styles --- */
 .mrp-search-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: 1fr 1fr 1fr auto auto;
     gap: 1rem;
     margin-bottom: 1rem;
     align-items: center;

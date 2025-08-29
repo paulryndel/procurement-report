@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Global variables for data, filters, sorting, and graphing ---
 let rawData = [];
 let mrpData = {};
+let inventoryData = {}; // For the new Inventory sheet
 let allProductCodes = [];
 let allProducts = {};
 let displayedCount = 0;
@@ -55,6 +56,9 @@ let mrpPriceChartInstance = null;
 let mrpSelectedForGraph = [];
 let mrpSelectedCustomers = [];
 let mrpSelectedProductGroups = [];
+let mrpSelectedProducts = [];
+let mrpFilterNegativeBalance = false;
+let mrpSelectedWeek = null;
 
 
 // --- Event Listeners ---
@@ -67,7 +71,7 @@ document.getElementById('part-search-input').addEventListener('input', () => fil
 document.getElementById('vendor-search-input').addEventListener('input', () => filterList('vendor-search-input', 'vendor-list'));
 document.getElementById('need-stock-filter').addEventListener('change', applyFiltersAndRender);
 document.getElementById('mrp-filter-btn').addEventListener('click', toggleNegativeMrpFilter);
-document.getElementById('clear-filters-btn').addEventListener('click', clearFiltersAndSort);
+document.getElementById('clear-filters-btn').addEventListener('click', clearAllFilters);
 document.getElementById('print-btn').addEventListener('click', printReport);
 // MRP Tab Listeners
 document.getElementById('mrp-filter-all').addEventListener('click', () => setMrpReportFilter('all'));
@@ -75,9 +79,12 @@ document.getElementById('mrp-filter-check').addEventListener('click', () => setM
 document.getElementById('mrp-filter-x').addEventListener('click', () => setMrpReportFilter('x'));
 document.getElementById('mrp-customer-filter-btn').addEventListener('click', () => toggleDropdown('mrp-customer-filter-dropdown'));
 document.getElementById('mrp-pg-filter-btn').addEventListener('click', () => toggleDropdown('mrp-pg-filter-dropdown'));
+document.getElementById('mrp-product-filter-btn').addEventListener('click', () => toggleDropdown('mrp-product-filter-dropdown'));
 document.getElementById('mrp-customer-search-input').addEventListener('input', () => filterList('mrp-customer-search-input', 'mrp-customer-list'));
 document.getElementById('mrp-pg-search-input').addEventListener('input', () => filterList('mrp-pg-search-input', 'mrp-pg-list'));
-document.getElementById('mrp-clear-search-filters-btn').addEventListener('click', clearMrpSearchFilters);
+document.getElementById('mrp-product-search-input').addEventListener('input', () => filterList('mrp-product-search-input', 'mrp-product-list'));
+document.getElementById('mrp-clear-search-filters-btn').addEventListener('click', clearMrpTabFilters);
+document.getElementById('mrp-balance-filter-btn').addEventListener('click', toggleMrpBalanceFilter);
 
 
 // --- Main File Handling ---
@@ -94,13 +101,27 @@ function handleProcurementFile(event) {
         setTimeout(() => {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-            const worksheet = workbook.Sheets['Query1'];
-            if (!worksheet) {
-                alert("Error: Sheet named 'Query1' not found.");
+
+            const worksheet21_24 = workbook.Sheets['Query_21_24'];
+            const worksheet25 = workbook.Sheets['Query_25'];
+
+            if (!worksheet21_24 && !worksheet25) {
+                alert("Error: Sheets named 'Query_21_24' and/or 'Query_25' not found.");
                 loadingOverlay.style.display = 'none';
                 return;
             }
-            rawData = XLSX.utils.sheet_to_json(worksheet);
+            
+            let data21_24 = [];
+            if (worksheet21_24) {
+                data21_24 = XLSX.utils.sheet_to_json(worksheet21_24);
+            }
+
+            let data25 = [];
+            if (worksheet25) {
+                data25 = XLSX.utils.sheet_to_json(worksheet25);
+            }
+            
+            rawData = [...data21_24, ...data25];
             
             populateFilters();
             applyFiltersAndRender();
@@ -128,20 +149,30 @@ function handleMrpFile(event) {
         setTimeout(() => {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-            const worksheet = workbook.Sheets['MRP'];
-            if (!worksheet) {
+            
+            const mrpWorksheet = workbook.Sheets['MRP'];
+            const inventoryWorksheet = workbook.Sheets['Inventory'];
+
+            if (!mrpWorksheet) {
                 alert("Error: Sheet named 'MRP' not found.");
-                loadingOverlay.style.display = 'none';
-                return;
             }
-            const mrpRawData = XLSX.utils.sheet_to_json(worksheet);
-            // Process data for both tabs
-            mrpData = processMrpData(mrpRawData);
-            mrpRawDataForReport = processMrpReportData(mrpRawData);
+            
+            if (mrpWorksheet) {
+                const mrpRawData = XLSX.utils.sheet_to_json(mrpWorksheet);
+                mrpData = processMrpData(mrpRawData);
+                mrpRawDataForReport = processMrpReportData(mrpRawData);
+                renderMrpReport();
+                populateMrpSearchFilters();
+            }
+
+            if (inventoryWorksheet) {
+                const inventoryRawData = XLSX.utils.sheet_to_json(inventoryWorksheet);
+                inventoryData = processInventoryData(inventoryRawData);
+            } else {
+                inventoryData = {}; // Reset if no inventory sheet is found
+            }
             
             applyFiltersAndRender(); // Update main tab
-            renderMrpReport(); // Update MRP report tab
-            populateMrpSearchFilters(); // Populate new search filters
             
             statusIcon.classList.add('success');
             loadingOverlay.style.display = 'none';
@@ -260,9 +291,9 @@ function processProcurementData(data) {
                 latestUnitPrice: unitPrice,
                 latestQuantity: quantity,
                 years: {
-                    2020: { qty: 0, priceSum: 0, count: 0 }, 2021: { qty: 0, priceSum: 0, count: 0 },
-                    2022: { qty: 0, priceSum: 0, count: 0 }, 2023: { qty: 0, priceSum: 0, count: 0 },
-                    2024: { qty: 0, priceSum: 0, count: 0 }, 2025: { qty: 0, priceSum: 0, count: 0 }
+                    2021: { qty: 0, priceSum: 0, count: 0 }, 2022: { qty: 0, priceSum: 0, count: 0 },
+                    2023: { qty: 0, priceSum: 0, count: 0 }, 2024: { qty: 0, priceSum: 0, count: 0 },
+                    2025: { qty: 0, priceSum: 0, count: 0 }
                 },
                 total: 0, aveQty: 0, safeStock: 0, lowLimit: 0, orderCount: 0
             };
@@ -279,12 +310,14 @@ function processProcurementData(data) {
             products[normalizedCode].latestQuantity = quantity;
         }
 
-        if (year >= 2020 && year <= 2025) {
-            const yearData = products[normalizedCode].years[year];
-            yearData.qty += quantity;
-            if (unitPrice > 0) { // Only include orders with a price in average calculation
-                yearData.priceSum += unitPrice;
-                yearData.count++;
+        if (year >= 2021 && year <= 2025) {
+            if (products[normalizedCode].years[year]) {
+                const yearData = products[normalizedCode].years[year];
+                yearData.qty += quantity;
+                if (unitPrice > 0) { // Only include orders with a price in average calculation
+                    yearData.priceSum += unitPrice;
+                    yearData.count++;
+                }
             }
         }
         products[normalizedCode].orderCount++;
@@ -335,6 +368,27 @@ function processMrpData(data) {
     return finalMrpData;
 }
 
+function processInventoryData(data) {
+    const inventoryMap = {};
+    data.forEach(row => {
+        const itemCode = String(row.ItemCode || '').trim();
+        if(itemCode) {
+            inventoryMap[itemCode] = Math.round(parseFloat(row.TotalOnHand) || 0);
+        }
+    });
+    return inventoryMap;
+}
+
+function getStoreStock(productCode) {
+    if (mrpData.hasOwnProperty(productCode)) {
+        return mrpData[productCode].storeStock;
+    }
+    if (inventoryData.hasOwnProperty(productCode)) {
+        return inventoryData[productCode];
+    }
+    return 0; // Default to 0 if not found in either
+}
+
 function sortData() {
     const { key, direction } = currentSort;
     const modifier = direction === 'asc' ? 1 : -1;
@@ -353,8 +407,8 @@ function sortData() {
             valB = productB.years[year] ? productB.years[year].qty : 0;
         }
         else if (key === 'needStock' || key === 'pcsNeeded') {
-            const mrpA = mrpData[a] || { mrpBalance: 0, storeStock: 0 };
-            const mrpB = mrpData[b] || { mrpBalance: 0, storeStock: 0 };
+            const mrpA = mrpData[a] || { mrpBalance: 0 };
+            const mrpB = mrpData[b] || { mrpBalance: 0 };
             
             const needA = (mrpA.mrpBalance <= productA.lowLimit) ? "YES" : "NO";
             const needB = (mrpB.mrpBalance <= productB.lowLimit) ? "YES" : "NO";
@@ -363,22 +417,33 @@ function sortData() {
                 valA = needA;
                 valB = needB;
             } else { // key === 'pcsNeeded'
+                const storeStockA = getStoreStock(a);
+                const storeStockB = getStoreStock(b);
                 if (needA === "YES") {
                     valA = productA.safeStock - mrpA.mrpBalance;
                 } else {
-                    valA = productA.safeStock - mrpA.storeStock;
+                    if (mrpData.hasOwnProperty(a)) {
+                        valA = productA.safeStock - mrpA.mrpBalance;
+                    } else {
+                        valA = productA.safeStock - storeStockA;
+                    }
                 }
                 if (needB === "YES") {
                     valB = productB.safeStock - mrpB.mrpBalance;
                 } else {
-                    valB = productB.safeStock - mrpB.storeStock;
+                     if (mrpData.hasOwnProperty(b)) {
+                        valB = productB.safeStock - mrpB.mrpBalance;
+                    } else {
+                        valB = productB.safeStock - storeStockB;
+                    }
                 }
             }
         } else {
-            const mrpA = mrpData[a] || { mrpBalance: 0, storeStock: 0, woPo: 0 };
-            const mrpB = mrpData[b] || { mrpBalance: 0, storeStock: 0, woPo: 0 };
-            const combinedA = { ...productA, ...mrpA };
-            const combinedB = { ...productB, ...mrpB };
+            let combinedA = { ...productA, ...(mrpData[a] || { mrpBalance: 0, woPo: 0 }) };
+            let combinedB = { ...productB, ...(mrpData[b] || { mrpBalance: 0, woPo: 0 }) };
+            combinedA.storeStock = getStoreStock(a);
+            combinedB.storeStock = getStoreStock(b);
+
             valA = combinedA[key];
             valB = combinedB[key];
         }
@@ -423,18 +488,22 @@ function appendRowsToTable(codesToRender) {
         const fullName = p.name || 'N/A';
         const truncatedName = fullName.length > 15 ? fullName.substring(0, 15) + '...' : fullName;
         
-        const productMrp = mrpData[code] || { mrpBalance: 0, storeStock: 0, woPo: 0 };
+        const productMrp = mrpData[code] || { mrpBalance: 0, woPo: 0 };
+        const storeStock = getStoreStock(code);
 
-        const { storeStock, mrpBalance } = productMrp;
+        const { mrpBalance } = productMrp;
         const { lowLimit, safeStock } = p;
 
-        // New calculation logic
         const needStock = (mrpBalance <= lowLimit) ? "YES" : "NO";
         let pcsNeeded = 0;
         if (needStock === "YES") {
             pcsNeeded = safeStock - mrpBalance;
         } else {
-            pcsNeeded = safeStock - storeStock;
+            if (mrpData.hasOwnProperty(code)) {
+                pcsNeeded = safeStock - mrpBalance;
+            } else {
+                pcsNeeded = safeStock - storeStock;
+            }
         }
         
         const highlightClass = (needStock === "YES") ? "highlight-red" : "";
@@ -442,9 +511,9 @@ function appendRowsToTable(codesToRender) {
         row.innerHTML = `
             <td class="font-semibold sticky-col-1">${code}</td>
             <td title="${fullName}" class="sticky-col-2">${truncatedName}</td>
-            <td class="text-center">${p.years[2020].qty}</td><td class="text-center">${p.years[2021].qty}</td>
-            <td class="text-center">${p.years[2022].qty}</td><td class="text-center">${p.years[2023].qty}</td>
-            <td class="text-center">${p.years[2024].qty}</td><td class="text-center">${p.years[2025].qty}</td>
+            <td class="text-center">${p.years[2021].qty}</td><td class="text-center">${p.years[2022].qty}</td>
+            <td class="text-center">${p.years[2023].qty}</td><td class="text-center">${p.years[2024].qty}</td>
+            <td class="text-center">${p.years[2025].qty}</td>
             <td class="text-center font-bold bg-yellow-100">${p.total}</td>
             <td class="text-center">${p.aveQty.toFixed(2)}</td><td class="text-center">${safeStock}</td>
             <td class="text-center">${lowLimit}</td>
@@ -594,21 +663,24 @@ function toggleDropdown(dropdownId) {
     document.getElementById(dropdownId).classList.toggle('hidden');
 }
 
-function clearFiltersAndSort() {
+function clearAllFilters() {
+    // Reset Product Information Tab
     selectedParts = [];
     selectedVendors = [];
     document.getElementById('need-stock-filter').value = 'all';
-    
-    // Reset MRP filter state
     filterNegativeMrp = false;
     document.getElementById('mrp-filter-btn').classList.remove('active');
-
     currentSort = { key: 'code', direction: 'asc' };
-
-    document.querySelectorAll('.filter-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#part-list input, #vendor-list input').forEach(cb => cb.checked = false);
     updateSelectedTags();
+    applyFiltersAndRender(); 
     
-    applyFiltersAndRender();
+    // Reset MRP Information Tab
+    clearMrpTabFilters();
+    mrpReportFilter = 'all';
+    document.querySelectorAll('.mrp-filter-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('mrp-filter-all').classList.add('active');
+    renderMrpReport();
 }
 
 function debounce(func, delay) {
@@ -651,7 +723,7 @@ function updateGraphAndDetails() {
     if (chartInstance) chartInstance.destroy();
     if (priceChartInstance) priceChartInstance.destroy();
     
-    const years = ['2020', '2021', '2022', '2023', '2024', '2025'];
+    const years = ['2021', '2022', '2023', '2024', '2025'];
     
     // --- Quantity Chart ---
     const qtyDatasets = selectedForGraph.map((code) => {
@@ -725,8 +797,8 @@ function updateDetailsTable(datasets) {
             formattedDate = `${month}-${year}`;
         }
 
-        const row = document.createElement('tr');
-        row.innerHTML = `
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
             <td>${index + 1}</td>
             <td style="background-color: ${color.replace('1)', '0.2)')}; color: ${color}; font-weight: bold;">${code}</td>
             <td title="${fullProductName}">${truncatedProductName}</td>
@@ -737,7 +809,7 @@ function updateDetailsTable(datasets) {
             <td class="text-center bg-yellow-100 font-semibold">${formattedDate}</td>
             <td class="text-center bg-yellow-100 font-semibold">${product.latestQuantity}</td>
         `;
-        tableBody.appendChild(row);
+        tableBody.appendChild(newRow);
     });
 }
 
@@ -801,15 +873,10 @@ function processMrpReportData(data) {
 
 function setMrpReportFilter(filter) {
     mrpReportFilter = filter;
-    mrpSelectedForGraph = []; // Reset selection
-    // Update active button visuals
+    clearMrpTabFilters();
     document.querySelectorAll('.mrp-filter-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`mrp-filter-${filter}`).classList.add('active');
     renderMrpReport();
-    // Hide the right panel when filter changes
-    document.getElementById('mrp-right-table-container').style.display = 'none';
-    document.getElementById('mrp-details-section').classList.add('hidden');
-    clearMrpSearchFilters();
 }
 
 function renderMrpReport() {
@@ -879,17 +946,11 @@ function renderMrpReport() {
             <td>${item.count}</td>
         `;
         row.addEventListener('click', (event) => {
-            clearMrpSearchFilters();
+            clearMrpSearchSelections();
+            mrpSelectedWeek = item.week;
             document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
             row.classList.add('selected');
-            document.getElementById('details-week-title').textContent = item.week;
-            renderMrpDetailsTable(mrpRawDataForReport.filter(row => {
-                let originalWeek = row.WeekFG;
-                if (typeof originalWeek === 'string') {
-                    return originalWeek.toLowerCase() === item.week.toLowerCase();
-                }
-                return false;
-            }));
+            renderMrpRightPanel();
         });
         leftTableBody.appendChild(row);
     });
@@ -903,23 +964,26 @@ function renderMrpDetailsTable(data) {
     mrpSelectedForGraph = []; // Reset selection
     document.getElementById('mrp-details-section').classList.add('hidden');
 
-    // 1. Pre-filter the data based on the global report filter (All, ✔, ✘)
-    let weekData = data;
+    let displayData = data;
+    
+    // Refine data based on All/✔/✘ filter
     if (mrpReportFilter === 'check') {
-        weekData = weekData.filter(row => !(row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม'));
+        const customersWithRed = new Set(data.filter(row => (row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม')).map(row => row.Customer));
+        displayData = data.filter(row => !customersWithRed.has(row.Customer));
     } else if (mrpReportFilter === 'x') {
-        weekData = weekData.filter(row => (row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม'));
+        const customersWithRed = new Set(data.filter(row => (row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม')).map(row => row.Customer));
+        displayData = data.filter(row => customersWithRed.has(row.Customer) && (row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม'));
     }
 
-    if(weekData.length === 0) {
+    if(displayData.length === 0) {
         rightPanel.style.display = 'none';
         return;
     }
     rightPanel.style.display = 'block';
 
-    // 2. Pre-calculate status counts for each customer for the status bar
+    // Pre-calculate status counts for each customer for the status bar
     const customerStatusCounts = {};
-    weekData.forEach(row => {
+    displayData.forEach(row => {
         const customer = row.Customer || 'N/A';
         if (!customerStatusCounts[customer]) {
             customerStatusCounts[customer] = { red: 0, green: 0 };
@@ -928,8 +992,8 @@ function renderMrpDetailsTable(data) {
         isRed ? customerStatusCounts[customer].red++ : customerStatusCounts[customer].green++;
     });
 
-    // 3. Group data by Customer, then Model, and aggregate identical products
-    const groupedData = weekData.reduce((acc, row) => {
+    // Group data by Customer, then Model, and aggregate identical products
+    const groupedData = displayData.reduce((acc, row) => {
         const customer = row.Customer || 'N/A';
         const model = row.Model || 'N/A';
         
@@ -954,7 +1018,7 @@ function renderMrpDetailsTable(data) {
         return acc;
     }, {});
 
-    // 4. Render the table with rowspan
+    // Render the table with rowspan
     const rightTableBody = document.getElementById('mrp-right-table-body');
     rightTableBody.innerHTML = '';
     let customerIndex = 0;
@@ -1006,8 +1070,13 @@ function renderMrpDetailsTable(data) {
                 const fullProductName = product.ProductName || '';
                 const truncatedProductName = fullProductName.length > 30 ? fullProductName.substring(0, 30) + '...' : fullProductName;
 
+                const productCode = product.Products || '';
+                const hasHistory = allProducts.hasOwnProperty(productCode);
+                const clickableClass = hasHistory ? 'clickable-product' : '';
+                const dataAttribute = hasHistory ? `data-product-code="${productCode}"` : '';
+
                 rowHtml += `
-                    <td class="clickable-product ${highlightClass}" data-product-code="${product.Products || ''}">${product.Products || ''}</td>
+                    <td class="${clickableClass} ${highlightClass}" ${dataAttribute}>${productCode}</td>
                     <td title="${fullProductName}">${truncatedProductName}</td>
                     <td>${product.Qty}</td>
                     <td>${product.Units || ''}</td>
@@ -1033,8 +1102,8 @@ function handleMrpProductClick(event) {
     const cell = event.target;
     const productCode = cell.dataset.productCode;
 
+    // This check is now mostly redundant due to the rendering change, but good for safety
     if (!productCode || !allProducts[productCode]) {
-        alert(`Product Code "${productCode}" has no purchasing history in the uploaded Procurement file.`);
         return;
     }
 
@@ -1074,12 +1143,12 @@ function renderMrpProductDetails(productCodes) {
     if (mrpChartInstance) mrpChartInstance.destroy();
     if (mrpPriceChartInstance) mrpPriceChartInstance.destroy();
 
-    const years = ['2020', '2021', '2022', '2023', '2024', '2025'];
+    const years = ['2021', '2022', '2023', '2024', '2025'];
     
     // Create datasets for all selected products
     const qtyDatasets = productCodes.map(code => {
         const product = allProducts[code];
-        const data = years.map(year => product.years[year].qty);
+        const data = years.map(year => product.years[year] ? product.years[year].qty : 0);
         const color = `rgba(${Math.floor(Math.random() * 155) + 50}, ${Math.floor(Math.random() * 155) + 50}, ${Math.floor(Math.random() * 155) + 50}, 1)`;
         return { label: code, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.1, pointRadius: 5 };
     });
@@ -1088,7 +1157,7 @@ function renderMrpProductDetails(productCodes) {
         const product = allProducts[code];
         const data = years.map(year => {
             const yearData = product.years[year];
-            return yearData.count > 0 ? (yearData.priceSum / yearData.count) : null;
+            return (yearData && yearData.count > 0) ? (yearData.priceSum / yearData.count) : null;
         });
         const color = qtyDatasets.find(d => d.label === code).borderColor;
         return { label: code, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.1, pointRadius: 5 };
@@ -1113,7 +1182,8 @@ function renderMrpProductDetails(productCodes) {
     tableBody.innerHTML = ''; 
     productCodes.forEach((code, index) => {
         const product = allProducts[code];
-        const productMrp = mrpData[code] || { mrpBalance: 0, storeStock: 0 };
+        const productMrp = mrpData[code] || { mrpBalance: 0 };
+        const storeStock = getStoreStock(code);
         const { lowLimit, safeStock } = product;
         const { mrpBalance } = productMrp;
 
@@ -1122,7 +1192,11 @@ function renderMrpProductDetails(productCodes) {
         if (needStock === "YES") {
             pcsNeeded = safeStock - mrpBalance;
         } else {
-            pcsNeeded = safeStock - productMrp.storeStock;
+             if (mrpData.hasOwnProperty(code)) {
+                pcsNeeded = safeStock - mrpBalance;
+            } else {
+                pcsNeeded = safeStock - storeStock;
+            }
         }
         const highlightClass = (needStock === "YES") ? "highlight-red" : "";
 
@@ -1161,9 +1235,11 @@ function renderMrpProductDetails(productCodes) {
 function populateMrpSearchFilters() {
     const uniqueCustomers = [...new Set(mrpRawDataForReport.map(row => row.Customer).filter(Boolean))].sort();
     const uniqueProductGroups = [...new Set(mrpRawDataForReport.map(row => row['Product Group']).filter(Boolean))].sort();
+    const uniqueProducts = [...new Set(mrpRawDataForReport.map(row => row.Products).filter(Boolean))].sort();
     
     populateCheckboxList('mrp-customer-list', uniqueCustomers, 'handleMrpCustomerSelection(this)');
     populateCheckboxList('mrp-pg-list', uniqueProductGroups, 'handleMrpPgSelection(this)');
+    populateCheckboxList('mrp-product-list', uniqueProducts, 'handleMrpProductSelection(this)');
 }
 
 function handleMrpCustomerSelection(checkbox) {
@@ -1174,6 +1250,10 @@ function handleMrpPgSelection(checkbox) {
     handleMrpSearchSelection(checkbox, mrpSelectedProductGroups);
 }
 
+function handleMrpProductSelection(checkbox) {
+    handleMrpSearchSelection(checkbox, mrpSelectedProducts);
+}
+
 function handleMrpSearchSelection(checkbox, selectedArray) {
     const value = checkbox.value;
     if (checkbox.checked) {
@@ -1182,34 +1262,81 @@ function handleMrpSearchSelection(checkbox, selectedArray) {
         const index = selectedArray.indexOf(value);
         if (index > -1) selectedArray.splice(index, 1);
     }
-    renderMrpRightPanelFromSearch();
+    mrpSelectedWeek = null;
+    document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
+    renderMrpRightPanel();
 }
 
-function clearMrpSearchFilters() {
+function clearMrpSearchSelections() {
     mrpSelectedCustomers = [];
     mrpSelectedProductGroups = [];
-    document.querySelectorAll('#mrp-customer-list input, #mrp-pg-list input').forEach(cb => cb.checked = false);
-    renderMrpRightPanelFromSearch();
+    mrpSelectedProducts = [];
+    mrpFilterNegativeBalance = false;
+    
+    document.querySelectorAll('#mrp-customer-list input, #mrp-pg-list input, #mrp-product-list input').forEach(cb => cb.checked = false);
+    document.getElementById('mrp-balance-filter-btn').classList.remove('active');
 }
 
-function renderMrpRightPanelFromSearch() {
-    // Deselect any week row
+function clearMrpTabFilters() {
+    clearMrpSearchSelections();
+    mrpSelectedWeek = null;
+    mrpSelectedForGraph = [];
     document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
-    document.getElementById('details-week-title').textContent = "Search Results";
+    renderMrpRightPanel();
+}
 
-    if (mrpSelectedCustomers.length === 0 && mrpSelectedProductGroups.length === 0) {
-        document.getElementById('mrp-right-table-container').style.display = 'none';
-        document.getElementById('mrp-details-section').classList.add('hidden');
-        return;
+
+function toggleMrpBalanceFilter() {
+    mrpFilterNegativeBalance = !mrpFilterNegativeBalance;
+    document.getElementById('mrp-balance-filter-btn').classList.toggle('active', mrpFilterNegativeBalance);
+    renderMrpRightPanel();
+}
+
+function renderMrpRightPanel() {
+    // Deselect any week row if search is active
+    if (mrpSelectedCustomers.length > 0 || mrpSelectedProductGroups.length > 0 || mrpSelectedProducts.length > 0) {
+        mrpSelectedWeek = null;
+        document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
+    }
+    
+    document.getElementById('details-week-title').textContent = mrpSelectedWeek || "Search Results";
+
+    // Determine the base dataset
+    let baseData;
+    if (mrpSelectedWeek) {
+        baseData = mrpRawDataForReport.filter(row => {
+             let originalWeek = row.WeekFG;
+             if (typeof originalWeek === 'string') {
+                 return originalWeek.toLowerCase() === mrpSelectedWeek.toLowerCase();
+             }
+             return false;
+        });
+    } else if (mrpSelectedCustomers.length > 0 || mrpSelectedProductGroups.length > 0 || mrpSelectedProducts.length > 0) {
+        baseData = mrpRawDataForReport;
+    } else {
+         document.getElementById('mrp-right-table-container').style.display = 'none';
+         document.getElementById('mrp-details-section').classList.add('hidden');
+         return;
     }
 
-    let filteredData = mrpRawDataForReport;
-
+    // Apply search filters
+    let filteredData = baseData;
     if (mrpSelectedCustomers.length > 0) {
         filteredData = filteredData.filter(row => mrpSelectedCustomers.includes(row.Customer));
     }
     if (mrpSelectedProductGroups.length > 0) {
         filteredData = filteredData.filter(row => mrpSelectedProductGroups.includes(row['Product Group']));
+    }
+     if (mrpSelectedProducts.length > 0) {
+        filteredData = filteredData.filter(row => mrpSelectedProducts.includes(row.Products));
+    }
+
+    // Apply (-)MRP filter
+    if (mrpFilterNegativeBalance) {
+        filteredData = filteredData.filter(row => {
+            const productMrp = mrpData[row.Products] || { mrpBalance: 0 };
+            return productMrp.mrpBalance < 0;
+        });
     }
 
     renderMrpDetailsTable(filteredData);

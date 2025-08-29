@@ -132,7 +132,7 @@
                                 <thead>
                                     <tr>
                                         <th colspan="2" class="header-product-info sticky-col-1 sticky-row-1">Product Information</th>
-                                        <th colspan="7" class="header-qty-history sticky-row-1">QTY Purchased History</th>
+                                        <th colspan="6" class="header-qty-history sticky-row-1">QTY Purchased History</th>
                                         <th colspan="3" class="header-calc-stock sticky-row-1">Calculated Stock</th>
                                         <th colspan="3" class="header-mrp-info sticky-row-1">MRP Information</th>
                                         <th colspan="2" class="header-key-factor sticky-row-1">KEY FACTOR</th>
@@ -140,7 +140,6 @@
                                     <tr>
                                         <th class="bg-green-100 sortable sticky-col-1 sticky-row-2" data-sort-key="code">Part Number</th>
                                         <th class="bg-green-100 sortable sticky-col-2 sticky-row-2" data-sort-key="name">Product Name</th>
-                                        <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2020">2020</th>
                                         <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2021">2021</th>
                                         <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2022">2022</th>
                                         <th class="text-center bg-violet-100 sortable sticky-row-2" data-sort-key="y2023">2023</th>
@@ -217,6 +216,19 @@
                                 <div id="mrp-pg-list" class="filter-list"></div>
                             </div>
                         </div>
+                        <div class="relative">
+                            <button id="mrp-product-filter-btn" class="filter-btn">
+                                <span>Search Products</span>
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="mrp-product-filter-dropdown" class="filter-dropdown hidden">
+                                <input type="text" id="mrp-product-search-input" placeholder="Search products..." class="filter-search-input">
+                                <div id="mrp-product-list" class="filter-list"></div>
+                            </div>
+                        </div>
+                        <button id="mrp-balance-filter-btn" class="mrp-filter-btn">
+                            (-)MRP
+                        </button>
                          <button id="mrp-clear-search-filters-btn" class="clear-filters-btn">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                             Clear
