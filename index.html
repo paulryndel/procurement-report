@@ -78,6 +78,7 @@
             <div class="border-b border-gray-200">
                 <nav class="-mb-px flex space-x-8" aria-label="Tabs">
                     <button class="tab-btn active" data-tab="product-info">Product Information</button>
+                    <button class="tab-btn" data-tab="mrp-info">MRP Information</button>
                     <button class="tab-btn" data-tab="supplier-info">Supplier Information</button>
                 </nav>
             </div>
@@ -190,6 +191,107 @@
                                         </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="mrp-info" class="tab-content" style="display: none;">
+                    <div class="mrp-search-controls">
+                         <div class="relative">
+                            <button id="mrp-customer-filter-btn" class="filter-btn">
+                                <span>Search Customer</span>
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="mrp-customer-filter-dropdown" class="filter-dropdown hidden">
+                                <input type="text" id="mrp-customer-search-input" placeholder="Search customers..." class="filter-search-input">
+                                <div id="mrp-customer-list" class="filter-list"></div>
+                            </div>
+                        </div>
+                        <div class="relative">
+                            <button id="mrp-pg-filter-btn" class="filter-btn">
+                                <span>Search Product Group</span>
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="mrp-pg-filter-dropdown" class="filter-dropdown hidden">
+                                <input type="text" id="mrp-pg-search-input" placeholder="Search groups..." class="filter-search-input">
+                                <div id="mrp-pg-list" class="filter-list"></div>
+                            </div>
+                        </div>
+                         <button id="mrp-clear-search-filters-btn" class="clear-filters-btn">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            Clear
+                        </button>
+                    </div>
+                    <div id="mrp-selected-filters-container" class="selected-filters-container"></div>
+
+
+                    <div class="mrp-report-container">
+                        <div class="mrp-left-panel">
+                            <div class="mrp-filter-container">
+                                <button id="mrp-filter-all" class="mrp-filter-btn active">All</button>
+                                <button id="mrp-filter-check" class="mrp-filter-btn">✔</button>
+                                <button id="mrp-filter-x" class="mrp-filter-btn">✘</button>
+                            </div>
+                            <div class="table-container-mrp">
+                                <table class="w-full text-sm" id="mrp-left-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort-key="week">Forecast</th>
+                                            <th>Customer Count</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mrp-left-table-body">
+                                        </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="mrp-right-panel" id="mrp-right-table-container" style="display: none;">
+                            <h3 class="text-lg font-semibold mb-2">Details for: <span id="details-week-title"></span></h3>
+                             <div class="table-container-mrp">
+                                <table class="w-full text-sm" id="mrp-right-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Customer</th>
+                                            <th>Model</th>
+                                            <th>Products</th>
+                                            <th>ProductName</th>
+                                            <th>Qty</th>
+                                            <th>Units</th>
+                                            <th>Status (%)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mrp-right-table-body">
+                                        </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="mrp-details-section" class="details-section hidden mt-6">
+                        <div id="mrp-graph-container" class="graph-container">
+                            <canvas id="mrp-history-chart"></canvas>
+                        </div>
+                        <div id="mrp-price-graph-container" class="graph-container">
+                            <canvas id="mrp-price-history-chart"></canvas>
+                        </div>
+                        <div id="mrp-details-table-container" class="details-table-container">
+                            <table class="w-full">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Product Code</th>
+                                        <th>Product Name</th>
+                                        <th>Vendor</th>
+                                        <th>Times Ordered</th>
+                                        <th>Total Ordered</th>
+                                        <th class="bg-yellow-100">Recent Price</th>
+                                        <th class="bg-yellow-100">Recent Date</th>
+                                        <th class="bg-yellow-100">Recent Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mrp-details-table-body">
+                                    </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

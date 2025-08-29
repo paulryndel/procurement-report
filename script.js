@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     addSortEventListeners();
+    addMrpSortEventListeners(); // Add listener for new sortable table
     // Register the datalabels plugin globally
     Chart.register(ChartDataLabels);
 });
@@ -44,8 +45,17 @@ let selectedVendors = [];
 let currentSort = { key: 'code', direction: 'asc' };
 let selectedForGraph = [];
 let chartInstance = null;
-let priceChartInstance = null; // New chart instance for price graph
-let filterNegativeMrp = false; // For the new (-)MRP filter
+let priceChartInstance = null;
+let filterNegativeMrp = false;
+let mrpRawDataForReport = [];
+let mrpReportFilter = 'all'; // 'all', 'check', 'x'
+let mrpReportSort = { key: 'week', direction: 'asc' }; // For MRP report sorting
+let mrpChartInstance = null;
+let mrpPriceChartInstance = null;
+let mrpSelectedForGraph = [];
+let mrpSelectedCustomers = [];
+let mrpSelectedProductGroups = [];
+
 
 // --- Event Listeners ---
 document.getElementById('excel-upload').addEventListener('change', handleProcurementFile);
@@ -59,6 +69,16 @@ document.getElementById('need-stock-filter').addEventListener('change', applyFil
 document.getElementById('mrp-filter-btn').addEventListener('click', toggleNegativeMrpFilter);
 document.getElementById('clear-filters-btn').addEventListener('click', clearFiltersAndSort);
 document.getElementById('print-btn').addEventListener('click', printReport);
+// MRP Tab Listeners
+document.getElementById('mrp-filter-all').addEventListener('click', () => setMrpReportFilter('all'));
+document.getElementById('mrp-filter-check').addEventListener('click', () => setMrpReportFilter('check'));
+document.getElementById('mrp-filter-x').addEventListener('click', () => setMrpReportFilter('x'));
+document.getElementById('mrp-customer-filter-btn').addEventListener('click', () => toggleDropdown('mrp-customer-filter-dropdown'));
+document.getElementById('mrp-pg-filter-btn').addEventListener('click', () => toggleDropdown('mrp-pg-filter-dropdown'));
+document.getElementById('mrp-customer-search-input').addEventListener('input', () => filterList('mrp-customer-search-input', 'mrp-customer-list'));
+document.getElementById('mrp-pg-search-input').addEventListener('input', () => filterList('mrp-pg-search-input', 'mrp-pg-list'));
+document.getElementById('mrp-clear-search-filters-btn').addEventListener('click', clearMrpSearchFilters);
+
 
 // --- Main File Handling ---
 function handleProcurementFile(event) {
@@ -115,9 +135,14 @@ function handleMrpFile(event) {
                 return;
             }
             const mrpRawData = XLSX.utils.sheet_to_json(worksheet);
+            // Process data for both tabs
             mrpData = processMrpData(mrpRawData);
+            mrpRawDataForReport = processMrpReportData(mrpRawData);
             
-            applyFiltersAndRender();
+            applyFiltersAndRender(); // Update main tab
+            renderMrpReport(); // Update MRP report tab
+            populateMrpSearchFilters(); // Populate new search filters
+            
             statusIcon.classList.add('success');
             loadingOverlay.style.display = 'none';
         }, 50);
@@ -462,7 +487,7 @@ function updateSummaryBoxes() {
 }
 
 function addSortEventListeners() {
-    document.querySelectorAll('.sortable').forEach(header => {
+    document.querySelectorAll('#product-table .sortable').forEach(header => {
         const sortKey = header.dataset.sortKey;
         header.innerHTML = header.textContent + `<span class="sort-icon" data-sort-key="${sortKey}"></span>`;
         header.addEventListener('click', () => {
@@ -478,7 +503,7 @@ function addSortEventListeners() {
 }
 
 function updateSortIcons() {
-    document.querySelectorAll('.sort-icon').forEach(icon => {
+    document.querySelectorAll('#product-table .sort-icon').forEach(icon => {
         icon.classList.remove('active');
         icon.innerHTML = '&#8693;';
         if (icon.dataset.sortKey === currentSort.key) {
@@ -692,7 +717,6 @@ function updateDetailsTable(datasets) {
         const fullVendorName = product.vendor || 'N/A';
         const truncatedVendorName = fullVendorName.length > 20 ? fullVendorName.substring(0, 20) + '...' : fullVendorName;
         
-        // UPDATED: Format date to Month-Year (e.g., Jan-2025)
         let formattedDate = 'N/A';
         if (product.lastOrderDate) {
             const d = product.lastOrderDate;
@@ -732,4 +756,441 @@ function printReport() {
         link.href = canvas.toDataURL('image/png');
         link.click();
     });
+}
+
+// --- MRP Report Tab Functions ---
+function addMrpSortEventListeners() {
+    document.querySelectorAll('#mrp-left-table .sortable').forEach(header => {
+        const sortKey = header.dataset.sortKey;
+        header.innerHTML += `<span class="sort-icon" data-sort-key="${sortKey}"></span>`;
+        header.addEventListener('click', () => {
+            if (mrpReportSort.key === sortKey) {
+                mrpReportSort.direction = mrpReportSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                mrpReportSort.key = sortKey;
+                mrpReportSort.direction = 'asc';
+            }
+            renderMrpReport();
+        });
+    });
+}
+
+function updateMrpSortIcons() {
+    document.querySelectorAll('#mrp-left-table .sort-icon').forEach(icon => {
+        icon.classList.remove('active');
+        icon.innerHTML = '&#8693;';
+        if (icon.dataset.sortKey === mrpReportSort.key) {
+            icon.classList.add('active');
+            icon.innerHTML = mrpReportSort.direction === 'asc' ? '&#8593;' : '&#8595;';
+        }
+    });
+}
+
+function processMrpReportData(data) {
+    // Clean up column names and rename customer column
+    return data.map(row => {
+        const cleanedRow = {};
+        for (const key in row) {
+            cleanedRow[key.trim()] = row[key];
+        }
+        // Standardize the customer column name
+        cleanedRow.Customer = cleanedRow['ชื่อลูกค้า'];
+        return cleanedRow;
+    });
+}
+
+function setMrpReportFilter(filter) {
+    mrpReportFilter = filter;
+    mrpSelectedForGraph = []; // Reset selection
+    // Update active button visuals
+    document.querySelectorAll('.mrp-filter-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`mrp-filter-${filter}`).classList.add('active');
+    renderMrpReport();
+    // Hide the right panel when filter changes
+    document.getElementById('mrp-right-table-container').style.display = 'none';
+    document.getElementById('mrp-details-section').classList.add('hidden');
+    clearMrpSearchFilters();
+}
+
+function renderMrpReport() {
+    if (mrpRawDataForReport.length === 0) return;
+
+    // 1. Pre-aggregate data to determine customer status per week
+    const weeklyCustomerStatus = mrpRawDataForReport.reduce((acc, row) => {
+        let week = row.WeekFG;
+        // Normalize week capitalization (e.g., "week49" and "WEEK49" become "Week49")
+        if (typeof week === 'string' && week.toLowerCase().startsWith('week')) {
+            week = 'W' + week.slice(1).toLowerCase();
+        }
+        
+        const customer = row.Customer;
+        if (!week || !customer) return acc;
+
+        if (!acc[week]) {
+            acc[week] = {};
+        }
+        if (!acc[week][customer]) {
+            // A customer starts as 'check' (green) until a 'red' item is found
+            acc[week][customer] = { status: 'check' }; 
+        }
+
+        // If any item for this customer in this week needs an order, the customer is 'x' (red) for the week
+        if ((row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม')) {
+            acc[week][customer].status = 'x';
+        }
+        
+        return acc;
+    }, {});
+
+    // 2. Calculate counts for the left table based on the filter
+    const weeklyCounts = {};
+    for (const week in weeklyCustomerStatus) {
+        const customers = weeklyCustomerStatus[week];
+        let count = 0;
+        if (mrpReportFilter === 'all') {
+            count = Object.keys(customers).length;
+        } else {
+            // Count customers whose status matches the current filter ('check' or 'x')
+            count = Object.values(customers).filter(c => c.status === mrpReportFilter).length;
+        }
+
+        if (count > 0) {
+            weeklyCounts[week] = count;
+        }
+    }
+
+    // 3. Convert to array and apply sorting
+    let leftTableData = Object.entries(weeklyCounts)
+        .map(([week, count]) => ({ week, count }));
+
+    const modifier = mrpReportSort.direction === 'asc' ? 1 : -1;
+    leftTableData.sort((a, b) => {
+        // Sort alphabetically by week name
+        return a.week.localeCompare(b.week) * modifier;
+    });
+
+    // 4. Render the left table
+    const leftTableBody = document.getElementById('mrp-left-table-body');
+    leftTableBody.innerHTML = '';
+    leftTableData.forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${item.week}</td>
+            <td>${item.count}</td>
+        `;
+        row.addEventListener('click', (event) => {
+            clearMrpSearchFilters();
+            document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
+            row.classList.add('selected');
+            renderMrpDetailsTable(mrpRawDataForReport.filter(row => {
+                let originalWeek = row.WeekFG;
+                if (typeof originalWeek === 'string') {
+                    return originalWeek.toLowerCase() === item.week.toLowerCase();
+                }
+                return false;
+            }));
+             document.getElementById('details-week-title').textContent = item.week;
+        });
+        leftTableBody.appendChild(row);
+    });
+
+    updateMrpSortIcons();
+}
+
+function renderMrpDetailsTable(data) {
+    const rightPanel = document.getElementById('mrp-right-table-container');
+    
+    mrpSelectedForGraph = []; // Reset selection
+    document.getElementById('mrp-details-section').classList.add('hidden');
+
+    // 1. Pre-filter the data based on the global report filter (All, ✔, ✘)
+    let weekData = data;
+    if (mrpReportFilter === 'check') {
+        weekData = weekData.filter(row => !(row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม'));
+    } else if (mrpReportFilter === 'x') {
+        weekData = weekData.filter(row => (row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม'));
+    }
+
+    if(weekData.length === 0) {
+        rightPanel.style.display = 'none';
+        return;
+    }
+    rightPanel.style.display = 'block';
+
+    // 2. Pre-calculate status counts for each customer for the status bar
+    const customerStatusCounts = {};
+    weekData.forEach(row => {
+        const customer = row.Customer || 'N/A';
+        if (!customerStatusCounts[customer]) {
+            customerStatusCounts[customer] = { red: 0, green: 0 };
+        }
+        const isRed = (row.WeekStatus || '').includes('ให้สั่งผลิตเพิ่ม');
+        isRed ? customerStatusCounts[customer].red++ : customerStatusCounts[customer].green++;
+    });
+
+    // 3. Group data by Customer, then Model, and aggregate identical products
+    const groupedData = weekData.reduce((acc, row) => {
+        const customer = row.Customer || 'N/A';
+        const model = row.Model || 'N/A';
+        
+        if (!acc[customer]) acc[customer] = {};
+        if (!acc[customer][model]) acc[customer][model] = [];
+        
+        const productKey = `${row.Products}|${row.ProductName}|${row.Units}`;
+        let productEntry = acc[customer][model].find(p => p.key === productKey);
+
+        if (productEntry) {
+            productEntry.Qty += parseFloat(row.Qty || 0);
+        } else {
+             acc[customer][model].push({
+                key: productKey,
+                Products: row.Products,
+                ProductName: row.ProductName,
+                Qty: parseFloat(row.Qty || 0),
+                Units: row.Units,
+                WeekStatus: row.WeekStatus
+            });
+        }
+        return acc;
+    }, {});
+
+    // 4. Render the table with rowspan
+    const rightTableBody = document.getElementById('mrp-right-table-body');
+    rightTableBody.innerHTML = '';
+    let customerIndex = 0;
+
+    for (const customer in groupedData) {
+        customerIndex++;
+        const models = groupedData[customer];
+        let isFirstCustomerRow = true;
+        const customerRowSpan = Object.values(models).reduce((sum, products) => sum + products.length, 0);
+
+        // Calculate percentages for the status bar
+        const counts = customerStatusCounts[customer];
+        const total = counts.red + counts.green;
+        const redPercent = total > 0 ? (counts.red / total) * 100 : 0;
+        const greenPercent = total > 0 ? (counts.green / total) * 100 : 0;
+        const statusBarHtml = `
+            <div class="status-bar-container">
+                <div class="status-bar-green" style="width: ${greenPercent}%;"></div>
+                <div class="status-bar-red" style="width: ${redPercent}%;"></div>
+                <span class="status-bar-text">${Math.round(redPercent)}%</span>
+            </div>
+        `;
+
+        for (const model in models) {
+            const products = models[model];
+            let isFirstModelRow = true;
+            const modelRowSpan = products.length;
+
+            products.forEach(product => {
+                const row = document.createElement('tr');
+                let rowHtml = '';
+
+                if (isFirstCustomerRow) {
+                    const fullCustomerName = customer;
+                    const truncatedCustomerName = fullCustomerName.length > 35 ? fullCustomerName.substring(0, 35) + '...' : fullCustomerName;
+                    
+                    rowHtml += `<td rowspan="${customerRowSpan}">${customerIndex}</td>`;
+                    rowHtml += `<td rowspan="${customerRowSpan}" title="${fullCustomerName}">${truncatedCustomerName}</td>`;
+                }
+
+                if (isFirstModelRow) {
+                    rowHtml += `<td rowspan="${modelRowSpan}">${model}</td>`;
+                    isFirstModelRow = false;
+                }
+
+                const status = product.WeekStatus || '';
+                const highlightClass = status.includes('ให้สั่งผลิตเพิ่ม') ? 'status-red' : 'status-green';
+                
+                const fullProductName = product.ProductName || '';
+                const truncatedProductName = fullProductName.length > 30 ? fullProductName.substring(0, 30) + '...' : fullProductName;
+
+                rowHtml += `
+                    <td class="clickable-product ${highlightClass}" data-product-code="${product.Products || ''}">${product.Products || ''}</td>
+                    <td title="${fullProductName}">${truncatedProductName}</td>
+                    <td>${product.Qty}</td>
+                    <td>${product.Units || ''}</td>
+                `;
+                
+                if (isFirstCustomerRow) {
+                    rowHtml += `<td rowspan="${customerRowSpan}">${statusBarHtml}</td>`;
+                    isFirstCustomerRow = false;
+                }
+
+                row.innerHTML = rowHtml;
+                rightTableBody.appendChild(row);
+            });
+        }
+    }
+    // Add event listeners to the newly created cells
+    document.querySelectorAll('#mrp-right-table .clickable-product').forEach(cell => {
+        cell.addEventListener('click', handleMrpProductClick);
+    });
+}
+
+function handleMrpProductClick(event) {
+    const cell = event.target;
+    const productCode = cell.dataset.productCode;
+
+    if (!productCode || !allProducts[productCode]) {
+        alert(`Product Code "${productCode}" has no purchasing history in the uploaded Procurement file.`);
+        return;
+    }
+
+    // Toggle selection in the array
+    const index = mrpSelectedForGraph.indexOf(productCode);
+    if (index > -1) {
+        mrpSelectedForGraph.splice(index, 1); // Deselect
+    } else {
+        mrpSelectedForGraph.push(productCode); // Select
+    }
+
+    // Update highlighting for all visible rows
+    document.querySelectorAll('#mrp-right-table .clickable-product').forEach(c => {
+        const code = c.dataset.productCode;
+        const row = c.closest('tr');
+        const productNameCell = row.cells[4];
+        if (productNameCell) {
+            productNameCell.classList.toggle('highlight-product-name', mrpSelectedForGraph.includes(code));
+        }
+    });
+
+    // Re-render the details section with the full list of selected products
+    renderMrpProductDetails(mrpSelectedForGraph);
+}
+
+function renderMrpProductDetails(productCodes) {
+    const detailsSection = document.getElementById('mrp-details-section');
+    const qtyCtx = document.getElementById('mrp-history-chart').getContext('2d');
+    const priceCtx = document.getElementById('mrp-price-history-chart').getContext('2d');
+
+    if (productCodes.length === 0) {
+        detailsSection.classList.add('hidden');
+        return;
+    }
+    detailsSection.classList.remove('hidden');
+
+    if (mrpChartInstance) mrpChartInstance.destroy();
+    if (mrpPriceChartInstance) mrpPriceChartInstance.destroy();
+
+    const years = ['2020', '2021', '2022', '2023', '2024', '2025'];
+    
+    // Create datasets for all selected products
+    const qtyDatasets = productCodes.map(code => {
+        const product = allProducts[code];
+        const data = years.map(year => product.years[year].qty);
+        const color = `rgba(${Math.floor(Math.random() * 155) + 50}, ${Math.floor(Math.random() * 155) + 50}, ${Math.floor(Math.random() * 155) + 50}, 1)`;
+        return { label: code, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.1, pointRadius: 5 };
+    });
+
+    const priceDatasets = productCodes.map(code => {
+        const product = allProducts[code];
+        const data = years.map(year => {
+            const yearData = product.years[year];
+            return yearData.count > 0 ? (yearData.priceSum / yearData.count) : null;
+        });
+        const color = qtyDatasets.find(d => d.label === code).borderColor;
+        return { label: code, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.1, pointRadius: 5 };
+    });
+
+    // --- Quantity Chart ---
+    mrpChartInstance = new Chart(qtyCtx, {
+        type: 'line',
+        data: { labels: years, datasets: qtyDatasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: `Yearly Purchase Quantity History` }, datalabels: { align: 'top', anchor: 'end', backgroundColor: (context) => context.dataset.borderColor, borderRadius: 4, color: 'white', font: { size: 8, weight: 'bold' }, formatter: (value) => value > 0 ? value : '', padding: 4 } }, scales: { y: { beginAtZero: true, title: { display: true, text: 'Quantity' } } } }
+    });
+
+    // --- Price Chart ---
+    mrpPriceChartInstance = new Chart(priceCtx, {
+        type: 'line',
+        data: { labels: years, datasets: priceDatasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: `Yearly Average Price History` }, datalabels: { align: 'top', anchor: 'end', backgroundColor: (context) => context.dataset.borderColor, borderRadius: 4, color: 'white', font: { size: 8, weight: 'bold' }, formatter: (value) => value ? value.toFixed(2) : '', padding: 4 } }, scales: { y: { beginAtZero: false, title: { display: true, text: 'Average Unit Price' } } } }
+    });
+    
+    // --- Details Table ---
+    const tableBody = document.getElementById('mrp-details-table-body');
+    tableBody.innerHTML = ''; 
+    productCodes.forEach((code, index) => {
+        const product = allProducts[code];
+        const color = qtyDatasets.find(d => d.label === code).borderColor;
+        let formattedDate = 'N/A';
+        if (product.lastOrderDate) {
+            const d = product.lastOrderDate;
+            const month = d.toLocaleString('en-US', { month: 'short' });
+            const year = d.getFullYear();
+            formattedDate = `${month}-${year}`;
+        }
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td>${index + 1}</td>
+            <td style="background-color: ${color.replace('1)', '0.2)')}; color: ${color}; font-weight: bold;">${code}</td>
+            <td>${product.name || 'N/A'}</td>
+            <td>${product.vendor || 'N/A'}</td>
+            <td class="text-center">${product.orderCount}</td>
+            <td class="text-center">${product.total}</td>
+            <td class="text-center bg-yellow-100 font-semibold">${product.latestUnitPrice.toFixed(2)}</td>
+            <td class="text-center bg-yellow-100 font-semibold">${formattedDate}</td>
+            <td class="text-center bg-yellow-100 font-semibold">${product.latestQuantity}</td>
+        `;
+        tableBody.appendChild(newRow);
+    });
+}
+
+// --- New MRP Search Filter Functions ---
+function populateMrpSearchFilters() {
+    const uniqueCustomers = [...new Set(mrpRawDataForReport.map(row => row.Customer).filter(Boolean))].sort();
+    const uniqueProductGroups = [...new Set(mrpRawDataForReport.map(row => row['Product Group']).filter(Boolean))].sort();
+    
+    populateCheckboxList('mrp-customer-list', uniqueCustomers, 'handleMrpCustomerSelection(this)');
+    populateCheckboxList('mrp-pg-list', uniqueProductGroups, 'handleMrpPgSelection(this)');
+}
+
+function handleMrpCustomerSelection(checkbox) {
+    handleMrpSearchSelection(checkbox, mrpSelectedCustomers);
+}
+
+function handleMrpPgSelection(checkbox) {
+    handleMrpSearchSelection(checkbox, mrpSelectedProductGroups);
+}
+
+function handleMrpSearchSelection(checkbox, selectedArray) {
+    const value = checkbox.value;
+    if (checkbox.checked) {
+        if (!selectedArray.includes(value)) selectedArray.push(value);
+    } else {
+        const index = selectedArray.indexOf(value);
+        if (index > -1) selectedArray.splice(index, 1);
+    }
+    renderMrpRightPanelFromSearch();
+}
+
+function clearMrpSearchFilters() {
+    mrpSelectedCustomers = [];
+    mrpSelectedProductGroups = [];
+    document.querySelectorAll('#mrp-customer-list input, #mrp-pg-list input').forEach(cb => cb.checked = false);
+    renderMrpRightPanelFromSearch();
+}
+
+function renderMrpRightPanelFromSearch() {
+    // Deselect any week row
+    document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
+    document.getElementById('details-week-title').textContent = "Search Results";
+
+    if (mrpSelectedCustomers.length === 0 && mrpSelectedProductGroups.length === 0) {
+        document.getElementById('mrp-right-table-container').style.display = 'none';
+        document.getElementById('mrp-details-section').classList.add('hidden');
+        return;
+    }
+
+    let filteredData = mrpRawDataForReport;
+
+    if (mrpSelectedCustomers.length > 0) {
+        filteredData = filteredData.filter(row => mrpSelectedCustomers.includes(row.Customer));
+    }
+    if (mrpSelectedProductGroups.length > 0) {
+        filteredData = filteredData.filter(row => mrpSelectedProductGroups.includes(row['Product Group']));
+    }
+
+    renderMrpDetailsTable(filteredData);
 }

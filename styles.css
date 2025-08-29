@@ -33,6 +33,7 @@ th, td {
     text-align: left;
     border: 1px solid #e2e8f0;
     white-space: nowrap;
+    vertical-align: middle; /* Better alignment with rowspan */
 }
 
 thead th {
@@ -391,4 +392,159 @@ tbody tr:hover .sticky-col-1, tbody tr:hover .sticky-col-2 {
 
 .print-btn:hover {
     background-color: #5b21b6;
+}
+
+/* --- MRP Report Tab Styles --- */
+.mrp-search-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 1rem;
+}
+
+.mrp-report-container {
+    display: grid;
+    grid-template-columns: 350px 1fr; /* Left column fixed width, right takes the rest */
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.mrp-left-panel, .mrp-right-panel {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.mrp-filter-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.mrp-filter-btn {
+    flex-grow: 1;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    border: 1px solid #cbd5e0;
+    background-color: #f1f5f9;
+    color: #475569;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.mrp-filter-btn:hover {
+    background-color: #e2e8f0;
+}
+
+.mrp-filter-btn.active {
+    color: white;
+    border-color: transparent;
+}
+
+#mrp-filter-all.active { background-color: #3b82f6; } /* Blue */
+#mrp-filter-check.active { background-color: #22c55e; } /* Green */
+#mrp-filter-x.active { background-color: #ef4444; } /* Red */
+
+.table-container-mrp {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+#mrp-left-table tbody tr {
+    cursor: pointer;
+}
+
+#mrp-left-table tbody tr:hover, #mrp-left-table tr.selected {
+    background-color: #fef9c3; /* Light yellow */
+}
+
+#mrp-left-table th, #mrp-right-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+/* --- MRP Report Table Headers --- */
+#mrp-left-table th {
+    background-color: #60a5fa; /* Blue */
+    color: white;
+}
+#mrp-left-table th .sort-icon {
+    color: white;
+}
+#mrp-left-table th .sort-icon.active {
+    opacity: 1;
+    color: white;
+}
+
+#mrp-right-table th {
+    background-color: #fef08a; /* Yellow */
+    color: #3f3f46; /* Dark Gray text */
+}
+
+/* --- MRP Report Highlighting --- */
+.status-red, .status-green {
+    font-weight: 600;
+}
+
+.status-red {
+    background-color: #fee2e2; /* Light Red */
+    color: #b91c1c; /* Dark Red */
+}
+
+.status-green {
+    background-color: #dcfce7; /* Light Green */
+    color: #166534; /* Dark Green */
+}
+
+.clickable-product {
+    cursor: pointer;
+    text-decoration: underline;
+    font-weight: bold;
+    color: #2563eb; /* Blue to indicate it's clickable */
+}
+
+.clickable-product:hover {
+    color: #1d4ed8;
+}
+
+.highlight-product-name {
+    background-color: #e0e7ff !important; /* A light indigo */
+    font-weight: bold;
+}
+
+/* --- Status Bar for MRP Report --- */
+.status-bar-container {
+    width: 60px;
+    height: 18px;
+    border: 1px solid #a1a1aa;
+    border-radius: 4px;
+    display: flex;
+    position: relative;
+    background-color: #f4f4f5;
+    overflow: hidden;
+}
+
+.status-bar-green, .status-bar-red {
+    height: 100%;
+}
+
+.status-bar-green { background-color: #22c55e; }
+.status-bar-red { background-color: #ef4444; }
+
+.status-bar-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
 }
