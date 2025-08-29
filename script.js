@@ -882,6 +882,7 @@ function renderMrpReport() {
             clearMrpSearchFilters();
             document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
             row.classList.add('selected');
+            document.getElementById('details-week-title').textContent = item.week;
             renderMrpDetailsTable(mrpRawDataForReport.filter(row => {
                 let originalWeek = row.WeekFG;
                 if (typeof originalWeek === 'string') {
@@ -889,7 +890,6 @@ function renderMrpReport() {
                 }
                 return false;
             }));
-             document.getElementById('details-week-title').textContent = item.week;
         });
         leftTableBody.appendChild(row);
     });
@@ -1113,6 +1113,19 @@ function renderMrpProductDetails(productCodes) {
     tableBody.innerHTML = ''; 
     productCodes.forEach((code, index) => {
         const product = allProducts[code];
+        const productMrp = mrpData[code] || { mrpBalance: 0, storeStock: 0 };
+        const { lowLimit, safeStock } = product;
+        const { mrpBalance } = productMrp;
+
+        const needStock = (mrpBalance <= lowLimit) ? "YES" : "NO";
+        let pcsNeeded = 0;
+        if (needStock === "YES") {
+            pcsNeeded = safeStock - mrpBalance;
+        } else {
+            pcsNeeded = safeStock - productMrp.storeStock;
+        }
+        const highlightClass = (needStock === "YES") ? "highlight-red" : "";
+
         const color = qtyDatasets.find(d => d.label === code).borderColor;
         let formattedDate = 'N/A';
         if (product.lastOrderDate) {
@@ -1121,17 +1134,24 @@ function renderMrpProductDetails(productCodes) {
             const year = d.getFullYear();
             formattedDate = `${month}-${year}`;
         }
+
+        const fullProductName = product.name || 'N/A';
+        const truncatedProductName = fullProductName.length > 25 ? fullProductName.substring(0, 25) + '...' : fullProductName;
+
         const newRow = document.createElement('tr');
         newRow.innerHTML = `
             <td>${index + 1}</td>
             <td style="background-color: ${color.replace('1)', '0.2)')}; color: ${color}; font-weight: bold;">${code}</td>
-            <td>${product.name || 'N/A'}</td>
+            <td title="${fullProductName}">${truncatedProductName}</td>
             <td>${product.vendor || 'N/A'}</td>
             <td class="text-center">${product.orderCount}</td>
             <td class="text-center">${product.total}</td>
             <td class="text-center bg-yellow-100 font-semibold">${product.latestUnitPrice.toFixed(2)}</td>
             <td class="text-center bg-yellow-100 font-semibold">${formattedDate}</td>
             <td class="text-center bg-yellow-100 font-semibold">${product.latestQuantity}</td>
+            <td class="text-center">${mrpBalance}</td>
+            <td class="text-center ${highlightClass}">${needStock}</td>
+            <td class="text-center">${pcsNeeded}</td>
         `;
         tableBody.appendChild(newRow);
     });
