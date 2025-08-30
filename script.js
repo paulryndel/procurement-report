@@ -978,24 +978,36 @@ function renderMrpReport() {
 
     // 4. Render the left table
     const leftTableBody = document.getElementById('mrp-left-table-body');
+    const leftTableHead = document.getElementById('mrp-left-table-head');
+    leftTableHead.innerHTML = '';
     leftTableBody.innerHTML = '';
+    
+    const headRow = document.createElement('tr');
+    const bodyRow = document.createElement('tr');
+
     leftTableData.forEach(item => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${item.week}</td>
-            <td>${item.count}</td>
-        `;
-        row.addEventListener('click', (event) => {
+        const th = document.createElement('th');
+        th.textContent = item.week;
+        th.className = 'sortable';
+        th.dataset.sortKey = 'week';
+        if(mrpSelectedWeek === item.week) th.classList.add('selected');
+
+        th.addEventListener('click', (event) => {
             clearMrpSearchSelections();
             mrpSelectedWeek = item.week;
-            document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
-            row.classList.add('selected');
+            document.querySelectorAll('#mrp-left-table th').forEach(h => h.classList.remove('selected'));
+            th.classList.add('selected');
             renderMrpRightPanel();
         });
-        leftTableBody.appendChild(row);
+        headRow.appendChild(th);
+
+        const td = document.createElement('td');
+        td.textContent = item.count;
+        bodyRow.appendChild(td);
     });
 
-    updateMrpSortIcons();
+    leftTableHead.appendChild(headRow);
+    leftTableBody.appendChild(bodyRow);
 }
 
 function renderMrpDetailsTable(data) {
@@ -1032,42 +1044,34 @@ function renderMrpDetailsTable(data) {
         isRed ? customerStatusCounts[customer].red++ : customerStatusCounts[customer].green++;
     });
 
-    // Group data by Customer, then Model, and aggregate identical products
+    // Group data for rowspan calculations
     const groupedData = displayData.reduce((acc, row) => {
         const customer = row.Customer || 'N/A';
         const model = row.Model || 'N/A';
-        
-        if (!acc[customer]) acc[customer] = {};
-        if (!acc[customer][model]) acc[customer][model] = [];
-        
-        const productKey = `${row.Products}|${row.ProductName}|${row.Units}`;
-        let productEntry = acc[customer][model].find(p => p.key === productKey);
+        const forecast = row.WeekFG || 'N/A';
+        const dateBOM = row.DateBOM instanceof Date ? row.DateBOM.toLocaleDateString() : (row.DateBOM || 'N/A');
+        const serialNo = row.SerialNo || 'N/A';
 
-        if (productEntry) {
-            productEntry.Qty += parseFloat(row.Qty || 0);
-        } else {
-             acc[customer][model].push({
-                key: productKey,
-                Products: row.Products,
-                ProductName: row.ProductName,
-                Qty: parseFloat(row.Qty || 0),
-                Units: row.Units,
-                WeekStatus: row.WeekStatus
-            });
-        }
+        if (!acc[customer]) acc[customer] = {};
+        if (!acc[customer][model]) acc[customer][model] = {};
+        if (!acc[customer][model][forecast]) acc[customer][model][forecast] = {};
+        if (!acc[customer][model][forecast][dateBOM]) acc[customer][model][forecast][dateBOM] = {};
+        if (!acc[customer][model][forecast][dateBOM][serialNo]) acc[customer][model][forecast][dateBOM][serialNo] = [];
+        
+        acc[customer][model][forecast][dateBOM][serialNo].push(row);
         return acc;
     }, {});
 
     // Render the table with rowspan
     const rightTableBody = document.getElementById('mrp-right-table-body');
     rightTableBody.innerHTML = '';
-    let customerIndex = 0;
+    let itemIndex = 0;
 
     for (const customer in groupedData) {
-        customerIndex++;
+        itemIndex++;
         const models = groupedData[customer];
         let isFirstCustomerRow = true;
-        const customerRowSpan = Object.values(models).reduce((sum, products) => sum + products.length, 0);
+        const customerRowSpan = Object.values(models).reduce((sum, forecasts) => sum + Object.values(forecasts).reduce((s, dates) => s + Object.values(dates).reduce((d, serials) => d + Object.values(serials).reduce((c, prods) => c + prods.length, 0), 0), 0), 0);
 
         // Calculate percentages for the status bar
         const counts = customerStatusCounts[customer];
@@ -1083,53 +1087,89 @@ function renderMrpDetailsTable(data) {
         `;
 
         for (const model in models) {
-            const products = models[model];
+            const forecasts = models[model];
             let isFirstModelRow = true;
-            const modelRowSpan = products.length;
+            const modelRowSpan = Object.values(forecasts).reduce((s, dates) => s + Object.values(dates).reduce((d, serials) => d + Object.values(serials).reduce((c, prods) => c + prods.length, 0), 0), 0);
 
-            products.forEach(product => {
-                const row = document.createElement('tr');
-                let rowHtml = '';
+            for (const forecast in forecasts) {
+                const dates = forecasts[forecast];
+                let isFirstForecastRow = true;
+                const forecastRowSpan = Object.values(dates).reduce((d, serials) => d + Object.values(serials).reduce((c, prods) => c + prods.length, 0), 0);
+            
+                for (const dateBOM in dates) {
+                    const serials = dates[dateBOM];
+                    let isFirstDateRow = true;
+                    const dateRowSpan = Object.values(serials).reduce((c, prods) => c + prods.length, 0);
 
-                if (isFirstCustomerRow) {
-                    const fullCustomerName = customer;
-                    const truncatedCustomerName = fullCustomerName.length > 35 ? fullCustomerName.substring(0, 35) + '...' : fullCustomerName;
-                    
-                    rowHtml += `<td rowspan="${customerRowSpan}">${customerIndex}</td>`;
-                    rowHtml += `<td rowspan="${customerRowSpan}" title="${fullCustomerName}">${truncatedCustomerName}</td>`;
+                    for (const serialNo in serials) {
+                        const products = serials[serialNo];
+                        let isFirstSerialRow = true;
+                        const serialRowSpan = products.length;
+
+                        products.forEach(product => {
+                            const row = document.createElement('tr');
+                            let rowHtml = '';
+
+                            if (isFirstCustomerRow) {
+                                rowHtml += `<td rowspan="${customerRowSpan}">${itemIndex}</td>`;
+                            }
+                            if (isFirstForecastRow) {
+                                rowHtml += `<td rowspan="${forecastRowSpan}">${forecast}</td>`;
+                            }
+                            if (isFirstDateRow) {
+                                rowHtml += `<td rowspan="${dateRowSpan}">${dateBOM}</td>`;
+                            }
+                            if (isFirstCustomerRow) {
+                                const fullCustomerName = customer;
+                                const truncatedCustomerName = fullCustomerName.length > 35 ? fullCustomerName.substring(0, 35) + '...' : fullCustomerName;
+                                rowHtml += `<td rowspan="${customerRowSpan}" title="${fullCustomerName}">${truncatedCustomerName}</td>`;
+                            }
+                            if (isFirstModelRow) {
+                                rowHtml += `<td rowspan="${modelRowSpan}">${model}</td>`;
+                            }
+                             if (isFirstSerialRow) {
+                                let displaySerialNo = serialNo;
+                                if (serialNo.includes(':')) {
+                                    displaySerialNo = serialNo.split(':')[1].trim();
+                                }
+                                rowHtml += `<td rowspan="${serialRowSpan}">${displaySerialNo}</td>`;
+                            }
+
+                            const status = product.WeekStatus || '';
+                            const highlightClass = status.includes('ให้สั่งผลิตเพิ่ม') ? 'status-red' : 'status-green';
+                            
+                            const fullProductName = product.ProductName || '';
+                            const truncatedProductName = fullProductName.length > 30 ? fullProductName.substring(0, 30) + '...' : fullProductName;
+
+                            const productCode = product.Products || '';
+                            const hasHistory = allProducts.hasOwnProperty(productCode);
+                            const clickableClass = hasHistory ? 'clickable-product' : '';
+                            const dataAttribute = hasHistory ? `data-product-code="${productCode}"` : '';
+
+                            rowHtml += `
+                                <td class="${clickableClass} ${highlightClass}" ${dataAttribute}>${productCode}</td>
+                                <td title="${fullProductName}">${truncatedProductName}</td>
+                                <td class="text-center">${product.Qty || 0}</td>
+                                <td class="text-center">${product.Units || ''}</td>
+                                <td class="text-center">${product.WeekBalance || 0}</td>
+                                <td class="text-center">${mrpData[productCode] ? mrpData[productCode].mrpBalance : 0}</td>
+                            `;
+                            
+                            if (isFirstCustomerRow) {
+                                rowHtml += `<td rowspan="${customerRowSpan}">${statusBarHtml}</td>`;
+                                isFirstCustomerRow = false;
+                            }
+                            isFirstModelRow = false;
+                            isFirstForecastRow = false;
+                            isFirstDateRow = false;
+                            isFirstSerialRow = false;
+
+                            row.innerHTML = rowHtml;
+                            rightTableBody.appendChild(row);
+                        });
+                    }
                 }
-
-                if (isFirstModelRow) {
-                    rowHtml += `<td rowspan="${modelRowSpan}">${model}</td>`;
-                    isFirstModelRow = false;
-                }
-
-                const status = product.WeekStatus || '';
-                const highlightClass = status.includes('ให้สั่งผลิตเพิ่ม') ? 'status-red' : 'status-green';
-                
-                const fullProductName = product.ProductName || '';
-                const truncatedProductName = fullProductName.length > 30 ? fullProductName.substring(0, 30) + '...' : fullProductName;
-
-                const productCode = product.Products || '';
-                const hasHistory = allProducts.hasOwnProperty(productCode);
-                const clickableClass = hasHistory ? 'clickable-product' : '';
-                const dataAttribute = hasHistory ? `data-product-code="${productCode}"` : '';
-
-                rowHtml += `
-                    <td class="${clickableClass} ${highlightClass}" ${dataAttribute}>${productCode}</td>
-                    <td title="${fullProductName}">${truncatedProductName}</td>
-                    <td>${product.Qty}</td>
-                    <td>${product.Units || ''}</td>
-                `;
-                
-                if (isFirstCustomerRow) {
-                    rowHtml += `<td rowspan="${customerRowSpan}">${statusBarHtml}</td>`;
-                    isFirstCustomerRow = false;
-                }
-
-                row.innerHTML = rowHtml;
-                rightTableBody.appendChild(row);
-            });
+            }
         }
     }
     // Add event listeners to the newly created cells
@@ -1309,7 +1349,7 @@ function handleMrpSearchSelection(checkbox, selectedArray) {
         if (index > -1) selectedArray.splice(index, 1);
     }
     mrpSelectedWeek = null;
-    document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
+    document.querySelectorAll('#mrp-left-table th').forEach(r => r.classList.remove('selected'));
     renderMrpRightPanel();
 }
 
@@ -1331,7 +1371,7 @@ function clearMrpTabFilters() {
     clearMrpSearchSelections();
     mrpSelectedWeek = null;
     mrpSelectedForGraph = [];
-    document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
+    document.querySelectorAll('#mrp-left-table th').forEach(r => r.classList.remove('selected'));
     renderMrpRightPanel();
 }
 
@@ -1346,7 +1386,7 @@ function renderMrpRightPanel() {
     // Deselect any week row if search is active
     if (mrpSelectedCustomers.length > 0 || mrpSelectedProductGroups.length > 0 || mrpSelectedProducts.length > 0 || mrpSelectedModels.length > 0 || mrpSelectedSources.length > 0) {
         mrpSelectedWeek = null;
-        document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
+        document.querySelectorAll('#mrp-left-table th').forEach(h => h.classList.remove('selected'));
     }
     
     document.getElementById('details-week-title').textContent = mrpSelectedWeek || "Search Results";

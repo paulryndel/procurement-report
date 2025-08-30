@@ -195,14 +195,14 @@
                 </div>
 
                 <div id="mrp-info" class="tab-content" style="display: none;">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold text-gray-700">MRP Information Report</h2>
-                        <button id="print-mrp-btn" class="print-btn">
-                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-                            Print MRP Report
-                        </button>
-                    </div>
                     <div id="mrp-capture-area">
+                         <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold text-gray-700">MRP Information Report</h2>
+                            <button id="print-mrp-btn" class="print-btn">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                                Print MRP Report
+                            </button>
+                        </div>
                         <div class="mrp-search-controls">
                              <div class="relative">
                                 <button id="mrp-customer-filter-btn" class="filter-btn">
@@ -253,48 +253,45 @@
                             </button>
                         </div>
                         <div id="mrp-selected-filters-container" class="selected-filters-container"></div>
-
-
-                        <div class="mrp-report-container">
-                            <div class="mrp-left-panel">
-                                <div class="mrp-filter-container">
-                                    <button id="mrp-filter-all" class="mrp-filter-btn active">All</button>
-                                    <button id="mrp-filter-check" class="mrp-filter-btn">✔</button>
-                                    <button id="mrp-filter-x" class="mrp-filter-btn">✘</button>
-                                </div>
-                                <div class="table-container-mrp">
-                                    <table class="w-full text-sm" id="mrp-left-table">
-                                        <thead>
-                                            <tr>
-                                                <th class="sortable" data-sort-key="week">Forecast</th>
-                                                <th>Customer Count</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="mrp-left-table-body">
-                                            </tbody>
-                                    </table>
-                                </div>
+                        
+                        <div id="mrp-forecast-summary" class="mrp-left-panel my-4">
+                             <div class="mrp-filter-container">
+                                <button id="mrp-filter-all" class="mrp-filter-btn active">All</button>
+                                <button id="mrp-filter-check" class="mrp-filter-btn">✔</button>
+                                <button id="mrp-filter-x" class="mrp-filter-btn">✘</button>
                             </div>
-                            <div class="mrp-right-panel" id="mrp-right-table-container" style="display: none;">
-                                <h3 class="text-lg font-semibold mb-2">Details for: <span id="details-week-title"></span></h3>
-                                 <div class="table-container-mrp">
-                                    <table class="w-full text-sm" id="mrp-right-table">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Customer</th>
-                                                <th>Model</th>
-                                                <th>Products</th>
-                                                <th>ProductName</th>
-                                                <th>Qty</th>
-                                                <th>Units</th>
-                                                <th>Status (%)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="mrp-right-table-body">
-                                            </tbody>
-                                    </table>
-                                </div>
+                            <div class="table-container-mrp-horizontal">
+                                <table class="w-full text-sm" id="mrp-left-table">
+                                    <thead id="mrp-left-table-head"></thead>
+                                    <tbody id="mrp-left-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="mrp-right-panel" id="mrp-right-table-container" style="display: none;">
+                            <h3 class="text-lg font-semibold mb-2">Details for: <span id="details-week-title"></span></h3>
+                             <div class="table-container-mrp">
+                                <table class="w-full text-sm" id="mrp-right-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Forecast</th>
+                                            <th>DateBOM</th>
+                                            <th>Customer</th>
+                                            <th>Model</th>
+                                            <th>SerialNo</th>
+                                            <th>Products</th>
+                                            <th>ProductName</th>
+                                            <th>Qty</th>
+                                            <th>Units</th>
+                                            <th>WeekBalance</th>
+                                            <th>MRPBalance</th>
+                                            <th>Status (%)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mrp-right-table-body">
+                                        </tbody>
+                                </table>
                             </div>
                         </div>
                         <div id="mrp-details-section" class="details-section hidden mt-6">

@@ -405,14 +405,7 @@ tbody tr:hover .sticky-col-1, tbody tr:hover .sticky-col-2 {
     padding-bottom: 1rem;
 }
 
-.mrp-report-container {
-    display: grid;
-    grid-template-columns: 350px 1fr; /* Left column fixed width, right takes the rest */
-    gap: 1.5rem;
-    align-items: flex-start;
-}
-
-.mrp-left-panel, .mrp-right-panel {
+.mrp-left-panel {
     background-color: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 0.5rem;
@@ -454,37 +447,37 @@ tbody tr:hover .sticky-col-1, tbody tr:hover .sticky-col-2 {
     max-height: 60vh;
     overflow-y: auto;
 }
-
-#mrp-left-table tbody tr {
-    cursor: pointer;
+.table-container-mrp-horizontal {
+    overflow-x: auto;
 }
-
-#mrp-left-table tbody tr:hover, #mrp-left-table tr.selected {
-    background-color: #fef9c3; /* Light yellow */
+#mrp-left-table {
+    border-collapse: separate;
+    border-spacing: 0;
 }
-
-#mrp-left-table th, #mrp-right-table th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-}
-
-/* --- MRP Report Table Headers --- */
 #mrp-left-table th {
     background-color: #60a5fa; /* Blue */
     color: white;
+    cursor: pointer;
+    padding: 0.5rem;
+    border: 1px solid #3b82f6;
 }
-#mrp-left-table th .sort-icon {
-    color: white;
+#mrp-left-table td {
+    text-align: center;
+    font-weight: 600;
+    padding: 0.5rem;
+    border: 1px solid #e2e8f0;
 }
-#mrp-left-table th .sort-icon.active {
-    opacity: 1;
-    color: white;
+#mrp-left-table th.selected {
+    background-color: #fef9c3; /* Light yellow */
+    color: #4a5568;
 }
 
 #mrp-right-table th {
     background-color: #fef08a; /* Yellow */
     color: #3f3f46; /* Dark Gray text */
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 /* --- MRP Report Highlighting --- */
