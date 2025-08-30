@@ -1139,7 +1139,7 @@ function renderMrpDetailsTable(data) {
                             const highlightClass = status.includes('ให้สั่งผลิตเพิ่ม') ? 'status-red' : 'status-green';
                             
                             const fullProductName = product.ProductName || '';
-                            const truncatedProductName = fullProductName.length > 30 ? fullProductName.substring(0, 30) + '...' : fullProductName;
+                            const truncatedProductName = fullProductName.length > 20 ? fullProductName.substring(0, 20) + '...' : fullProductName;
 
                             const productCode = product.Products || '';
                             const hasHistory = allProducts.hasOwnProperty(productCode);
