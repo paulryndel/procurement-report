@@ -78,6 +78,7 @@ document.getElementById('mrp-filter-btn').addEventListener('click', toggleNegati
 document.getElementById('clear-filters-btn').addEventListener('click', clearAllFilters);
 document.getElementById('print-btn').addEventListener('click', printReport);
 // MRP Tab Listeners
+document.getElementById('print-mrp-btn').addEventListener('click', printMrpReport);
 document.getElementById('mrp-filter-all').addEventListener('click', () => setMrpReportFilter('all'));
 document.getElementById('mrp-filter-check').addEventListener('click', () => setMrpReportFilter('check'));
 document.getElementById('mrp-filter-x').addEventListener('click', () => setMrpReportFilter('x'));
@@ -852,6 +853,23 @@ function printReport() {
     });
 }
 
+function printMrpReport() {
+    const captureArea = document.getElementById('mrp-capture-area');
+    html2canvas(captureArea, {
+        useCORS: true,
+        allowTaint: true,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: document.documentElement.offsetHeight
+    }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'mrp-report.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+}
+
 // --- MRP Report Tab Functions ---
 function addMrpSortEventListeners() {
     document.querySelectorAll('#mrp-left-table .sortable').forEach(header => {
@@ -968,8 +986,8 @@ function renderMrpReport() {
             <td>${item.count}</td>
         `;
         row.addEventListener('click', (event) => {
-            mrpSelectedWeek = item.week;
             clearMrpSearchSelections();
+            mrpSelectedWeek = item.week;
             document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
             row.classList.add('selected');
             renderMrpRightPanel();
@@ -1060,7 +1078,7 @@ function renderMrpDetailsTable(data) {
             <div class="status-bar-container">
                 <div class="status-bar-green" style="width: ${greenPercent}%;"></div>
                 <div class="status-bar-red" style="width: ${redPercent}%;"></div>
-                <span class="status-bar-text">${Math.round(redPercent)}%</span>
+                <span class="status-bar-text">${Math.round(greenPercent)}%</span>
             </div>
         `;
 
@@ -1295,7 +1313,7 @@ function handleMrpSearchSelection(checkbox, selectedArray) {
     renderMrpRightPanel();
 }
 
-function clearMrpSearchSelections() {
+function clearMrpSearchSelections(render = true) {
     mrpSelectedCustomers = [];
     mrpSelectedProductGroups = [];
     mrpSelectedProducts = [];
@@ -1305,6 +1323,7 @@ function clearMrpSearchSelections() {
     
     document.querySelectorAll('#mrp-customer-list input, #mrp-pg-list input, #mrp-product-list input, #mrp-model-list input, #mrp-source-filter-list input').forEach(cb => cb.checked = false);
     document.getElementById('mrp-balance-filter-btn').classList.remove('active');
+    if(render) renderMrpRightPanel();
 }
 
 
