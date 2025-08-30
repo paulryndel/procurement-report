@@ -107,7 +107,7 @@
                                 <div id="vendor-list" class="filter-list"></div>
                             </div>
                         </div>
-                        <div class="relative">
+                        <div id="source-filter-placeholder"></div> <div class="relative">
                             <select id="need-stock-filter" class="filter-btn">
                                 <option value="all">Show All (Need Stock?)</option>
                                 <option value="YES">YES</option>
@@ -226,7 +226,17 @@
                                 <div id="mrp-product-list" class="filter-list"></div>
                             </div>
                         </div>
-                        <button id="mrp-balance-filter-btn" class="mrp-filter-btn">
+                        <div class="relative">
+                            <button id="mrp-model-filter-btn" class="filter-btn">
+                                <span>Search Model</span>
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="mrp-model-filter-dropdown" class="filter-dropdown hidden">
+                                <input type="text" id="mrp-model-search-input" placeholder="Search models..." class="filter-search-input">
+                                <div id="mrp-model-list" class="filter-list"></div>
+                            </div>
+                        </div>
+                        <div id="mrp-source-filter-placeholder"></div> <button id="mrp-balance-filter-btn" class="mrp-filter-btn">
                             (-)MRP
                         </button>
                          <button id="mrp-clear-search-filters-btn" class="clear-filters-btn">

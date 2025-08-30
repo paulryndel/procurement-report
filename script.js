@@ -26,7 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     addSortEventListeners();
-    addMrpSortEventListeners(); // Add listener for new sortable table
+    addMrpSortEventListeners(); 
+    createSourceFilters(); // Create the new Source filters
     // Register the datalabels plugin globally
     Chart.register(ChartDataLabels);
 });
@@ -34,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Global variables for data, filters, sorting, and graphing ---
 let rawData = [];
 let mrpData = {};
-let inventoryData = {}; // For the new Inventory sheet
+let inventoryData = {};
 let allProductCodes = [];
 let allProducts = {};
 let displayedCount = 0;
@@ -43,6 +44,7 @@ let uniquePartsAndNames = [];
 let uniqueVendors = [];
 let selectedParts = [];
 let selectedVendors = [];
+let selectedSources = []; // For main tab
 let currentSort = { key: 'code', direction: 'asc' };
 let selectedForGraph = [];
 let chartInstance = null;
@@ -50,13 +52,15 @@ let priceChartInstance = null;
 let filterNegativeMrp = false;
 let mrpRawDataForReport = [];
 let mrpReportFilter = 'all'; // 'all', 'check', 'x'
-let mrpReportSort = { key: 'week', direction: 'asc' }; // For MRP report sorting
+let mrpReportSort = { key: 'week', direction: 'asc' };
 let mrpChartInstance = null;
 let mrpPriceChartInstance = null;
 let mrpSelectedForGraph = [];
 let mrpSelectedCustomers = [];
 let mrpSelectedProductGroups = [];
 let mrpSelectedProducts = [];
+let mrpSelectedModels = [];
+let mrpSelectedSources = []; // For MRP tab
 let mrpFilterNegativeBalance = false;
 let mrpSelectedWeek = null;
 
@@ -80,9 +84,11 @@ document.getElementById('mrp-filter-x').addEventListener('click', () => setMrpRe
 document.getElementById('mrp-customer-filter-btn').addEventListener('click', () => toggleDropdown('mrp-customer-filter-dropdown'));
 document.getElementById('mrp-pg-filter-btn').addEventListener('click', () => toggleDropdown('mrp-pg-filter-dropdown'));
 document.getElementById('mrp-product-filter-btn').addEventListener('click', () => toggleDropdown('mrp-product-filter-dropdown'));
+document.getElementById('mrp-model-filter-btn').addEventListener('click', () => toggleDropdown('mrp-model-filter-dropdown'));
 document.getElementById('mrp-customer-search-input').addEventListener('input', () => filterList('mrp-customer-search-input', 'mrp-customer-list'));
 document.getElementById('mrp-pg-search-input').addEventListener('input', () => filterList('mrp-pg-search-input', 'mrp-pg-list'));
 document.getElementById('mrp-product-search-input').addEventListener('input', () => filterList('mrp-product-search-input', 'mrp-product-list'));
+document.getElementById('mrp-model-search-input').addEventListener('input', () => filterList('mrp-model-search-input', 'mrp-model-list'));
 document.getElementById('mrp-clear-search-filters-btn').addEventListener('click', clearMrpTabFilters);
 document.getElementById('mrp-balance-filter-btn').addEventListener('click', toggleMrpBalanceFilter);
 
@@ -206,32 +212,37 @@ function applyFiltersAndRender() {
     // Process the data after basic filters
     allProducts = processProcurementData(filteredRawData);
     
+    // Create a temporary list of product codes to filter
+    let productCodesToDisplay = Object.keys(allProducts);
+
+    // Apply Source Filter
+    if (selectedSources.length > 0) {
+        productCodesToDisplay = productCodesToDisplay.filter(code => {
+            const source = allProducts[code].source || 'N/A';
+            return selectedSources.includes(source);
+        });
+    }
+    
     // Apply Negative MRP Filter
     if (filterNegativeMrp) {
-        const filteredCodes = Object.keys(allProducts).filter(code => {
+        productCodesToDisplay = productCodesToDisplay.filter(code => {
             const productMrp = mrpData[code] || { mrpBalance: 0 };
             return productMrp.mrpBalance < 0;
         });
-        const tempFilteredProducts = {};
-        filteredCodes.forEach(code => tempFilteredProducts[code] = allProducts[code]);
-        allProducts = tempFilteredProducts;
     }
     
     // Apply "Need Stock?" dropdown filter
     const needStockFilter = document.getElementById('need-stock-filter').value;
     if (needStockFilter !== 'all') {
-        const filteredCodes = Object.keys(allProducts).filter(code => {
+        productCodesToDisplay = productCodesToDisplay.filter(code => {
             const p = allProducts[code];
             const productMrp = mrpData[code] || { mrpBalance: 0 };
             const needStock = (productMrp.mrpBalance <= p.lowLimit) ? "YES" : "NO";
             return needStock === needStockFilter;
         });
-        const tempFilteredProducts = {};
-        filteredCodes.forEach(code => tempFilteredProducts[code] = allProducts[code]);
-        allProducts = tempFilteredProducts;
     }
 
-    allProductCodes = Object.keys(allProducts);
+    allProductCodes = productCodesToDisplay;
     sortData();
     updateSortIcons();
     updateSummaryBoxes();
@@ -278,7 +289,6 @@ function processProcurementData(data) {
         }
 
         const year = date.getFullYear();
-        // UPDATED: Use the robust parsing function
         const quantity = parseNumericValue(trimmedRow['Quantity']);
         const unitPrice = parseNumericValue(trimmedRow['Unit Price']);
 
@@ -286,6 +296,7 @@ function processProcurementData(data) {
             products[normalizedCode] = {
                 name: trimmedRow['Product Name'],
                 vendor: trimmedRow['Vendor Name'],
+                source: 'N/A', // Default source
                 firstOrderDate: date,
                 lastOrderDate: date,
                 latestUnitPrice: unitPrice,
@@ -308,13 +319,23 @@ function processProcurementData(data) {
             products[normalizedCode].vendor = trimmedRow['Vendor Name'];
             products[normalizedCode].latestUnitPrice = unitPrice;
             products[normalizedCode].latestQuantity = quantity;
+
+            // Determine source based on the latest entry's Vendor Code
+            const vendorCode = String(trimmedRow['Vendor Code'] || '').trim().toLowerCase();
+            if (vendorCode === 'import') {
+                products[normalizedCode].source = 'Import';
+            } else if (vendorCode === 'local') {
+                products[normalizedCode].source = 'Local';
+            } else {
+                products[normalizedCode].source = 'N/A';
+            }
         }
 
         if (year >= 2021 && year <= 2025) {
             if (products[normalizedCode].years[year]) {
                 const yearData = products[normalizedCode].years[year];
                 yearData.qty += quantity;
-                if (unitPrice > 0) { // Only include orders with a price in average calculation
+                if (unitPrice > 0) {
                     yearData.priceSum += unitPrice;
                     yearData.count++;
                 }
@@ -667,11 +688,12 @@ function clearAllFilters() {
     // Reset Product Information Tab
     selectedParts = [];
     selectedVendors = [];
+    selectedSources = [];
     document.getElementById('need-stock-filter').value = 'all';
     filterNegativeMrp = false;
     document.getElementById('mrp-filter-btn').classList.remove('active');
     currentSort = { key: 'code', direction: 'asc' };
-    document.querySelectorAll('#part-list input, #vendor-list input').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#part-list input, #vendor-list input, #source-filter-list input').forEach(cb => cb.checked = false);
     updateSelectedTags();
     applyFiltersAndRender(); 
     
@@ -946,8 +968,8 @@ function renderMrpReport() {
             <td>${item.count}</td>
         `;
         row.addEventListener('click', (event) => {
-            clearMrpSearchSelections();
             mrpSelectedWeek = item.week;
+            clearMrpSearchSelections();
             document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
             row.classList.add('selected');
             renderMrpRightPanel();
@@ -1236,10 +1258,12 @@ function populateMrpSearchFilters() {
     const uniqueCustomers = [...new Set(mrpRawDataForReport.map(row => row.Customer).filter(Boolean))].sort();
     const uniqueProductGroups = [...new Set(mrpRawDataForReport.map(row => row['Product Group']).filter(Boolean))].sort();
     const uniqueProducts = [...new Set(mrpRawDataForReport.map(row => row.Products).filter(Boolean))].sort();
+    const uniqueModels = [...new Set(mrpRawDataForReport.map(row => row.Model).filter(Boolean))].sort();
     
     populateCheckboxList('mrp-customer-list', uniqueCustomers, 'handleMrpCustomerSelection(this)');
     populateCheckboxList('mrp-pg-list', uniqueProductGroups, 'handleMrpPgSelection(this)');
     populateCheckboxList('mrp-product-list', uniqueProducts, 'handleMrpProductSelection(this)');
+    populateCheckboxList('mrp-model-list', uniqueModels, 'handleMrpModelSelection(this)');
 }
 
 function handleMrpCustomerSelection(checkbox) {
@@ -1252,6 +1276,10 @@ function handleMrpPgSelection(checkbox) {
 
 function handleMrpProductSelection(checkbox) {
     handleMrpSearchSelection(checkbox, mrpSelectedProducts);
+}
+
+function handleMrpModelSelection(checkbox) {
+    handleMrpSearchSelection(checkbox, mrpSelectedModels);
 }
 
 function handleMrpSearchSelection(checkbox, selectedArray) {
@@ -1271,11 +1299,14 @@ function clearMrpSearchSelections() {
     mrpSelectedCustomers = [];
     mrpSelectedProductGroups = [];
     mrpSelectedProducts = [];
+    mrpSelectedModels = [];
+    mrpSelectedSources = [];
     mrpFilterNegativeBalance = false;
     
-    document.querySelectorAll('#mrp-customer-list input, #mrp-pg-list input, #mrp-product-list input').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#mrp-customer-list input, #mrp-pg-list input, #mrp-product-list input, #mrp-model-list input, #mrp-source-filter-list input').forEach(cb => cb.checked = false);
     document.getElementById('mrp-balance-filter-btn').classList.remove('active');
 }
+
 
 function clearMrpTabFilters() {
     clearMrpSearchSelections();
@@ -1294,7 +1325,7 @@ function toggleMrpBalanceFilter() {
 
 function renderMrpRightPanel() {
     // Deselect any week row if search is active
-    if (mrpSelectedCustomers.length > 0 || mrpSelectedProductGroups.length > 0 || mrpSelectedProducts.length > 0) {
+    if (mrpSelectedCustomers.length > 0 || mrpSelectedProductGroups.length > 0 || mrpSelectedProducts.length > 0 || mrpSelectedModels.length > 0 || mrpSelectedSources.length > 0) {
         mrpSelectedWeek = null;
         document.querySelectorAll('#mrp-left-table-body tr').forEach(r => r.classList.remove('selected'));
     }
@@ -1311,7 +1342,7 @@ function renderMrpRightPanel() {
              }
              return false;
         });
-    } else if (mrpSelectedCustomers.length > 0 || mrpSelectedProductGroups.length > 0 || mrpSelectedProducts.length > 0) {
+    } else if (mrpSelectedCustomers.length > 0 || mrpSelectedProductGroups.length > 0 || mrpSelectedProducts.length > 0 || mrpSelectedModels.length > 0 || mrpSelectedSources.length > 0) {
         baseData = mrpRawDataForReport;
     } else {
          document.getElementById('mrp-right-table-container').style.display = 'none';
@@ -1330,6 +1361,17 @@ function renderMrpRightPanel() {
      if (mrpSelectedProducts.length > 0) {
         filteredData = filteredData.filter(row => mrpSelectedProducts.includes(row.Products));
     }
+    if (mrpSelectedModels.length > 0) {
+        filteredData = filteredData.filter(row => mrpSelectedModels.includes(row.Model));
+    }
+    if (mrpSelectedSources.length > 0) {
+        filteredData = filteredData.filter(row => {
+            const productInfo = allProducts[row.Products];
+            const source = (productInfo && productInfo.source) ? productInfo.source : 'N/A';
+            return mrpSelectedSources.includes(source);
+        });
+    }
+
 
     // Apply (-)MRP filter
     if (mrpFilterNegativeBalance) {
@@ -1340,4 +1382,52 @@ function renderMrpRightPanel() {
     }
 
     renderMrpDetailsTable(filteredData);
+}
+
+// --- Source Filter Functions ---
+function createSourceFilters() {
+    const filterHtml = `
+        <div class="relative">
+            <button id="PLACEHOLDER_ID-btn" class="filter-btn">
+                <span>Filter by Source</span>
+                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            <div id="PLACEHOLDER_ID-dropdown" class="filter-dropdown hidden">
+                <div id="PLACEHOLDER_ID-list" class="filter-list"></div>
+            </div>
+        </div>
+    `;
+    
+    // For Product Information Tab
+    const placeholder1 = document.getElementById('source-filter-placeholder');
+    placeholder1.innerHTML = filterHtml.replace(/PLACEHOLDER_ID/g, 'source-filter');
+    populateCheckboxList('source-filter-list', ['Import', 'Local', 'N/A'], 'handleSourceSelection(this)');
+    document.getElementById('source-filter-btn').addEventListener('click', () => toggleDropdown('source-filter-dropdown'));
+
+    // For MRP Information Tab
+    const placeholder2 = document.getElementById('mrp-source-filter-placeholder');
+    placeholder2.innerHTML = filterHtml.replace(/PLACEHOLDER_ID/g, 'mrp-source-filter');
+    populateCheckboxList('mrp-source-filter-list', ['Import', 'Local', 'N/A'], 'handleMrpSourceSelection(this)');
+    document.getElementById('mrp-source-filter-btn').addEventListener('click', () => toggleDropdown('mrp-source-filter-dropdown'));
+
+}
+
+function handleSourceSelection(checkbox) {
+    handleGenericSelection(checkbox, selectedSources);
+    applyFiltersAndRender(); 
+}
+
+function handleMrpSourceSelection(checkbox) {
+    handleGenericSelection(checkbox, mrpSelectedSources);
+    renderMrpRightPanel();
+}
+
+function handleGenericSelection(checkbox, selectedArray) {
+    const value = checkbox.value;
+    if (checkbox.checked) {
+        if (!selectedArray.includes(value)) selectedArray.push(value);
+    } else {
+        const index = selectedArray.indexOf(value);
+        if (index > -1) selectedArray.splice(index, 1);
+    }
 }
