@@ -362,7 +362,7 @@ function processProcurementData(data) {
 
 
 function processMrpData(data) {
-    const tempMrpData = {};
+    const finalMrpData = {};
     data.forEach(row => {
         const originalCode = String(row['Products'] || '').trim();
         if (!originalCode) return;
@@ -372,21 +372,14 @@ function processMrpData(data) {
             normalizedCode = 'ML' + normalizedCode.substring(2);
         }
 
-        if (!tempMrpData[normalizedCode]) tempMrpData[normalizedCode] = [];
-        tempMrpData[normalizedCode].push(row);
-    });
-
-    const finalMrpData = {};
-    for (const productCode in tempMrpData) {
-        let minRow = tempMrpData[productCode].reduce((prev, curr) => 
-            (parseFloat(prev['ThisTimeBalance']) || Infinity) < (parseFloat(curr['ThisTimeBalance']) || Infinity) ? prev : curr
-        );
-        finalMrpData[productCode] = {
-            mrpBalance: Math.round(parseFloat(minRow['MRPBalance']) || 0),
-            storeStock: Math.round(parseFloat(minRow['StockOnHand']) || 0),
-            woPo: Math.round((parseFloat(minRow['AllWO']) || 0) + (parseFloat(minRow['AllPO']) || 0))
+        // This new logic simply overwrites the data for a product code with each new row found.
+        // By the end of the loop, only the data from the LAST row for that product will remain.
+        finalMrpData[normalizedCode] = {
+            mrpBalance: Math.round(parseFloat(row['MRPBalance']) || 0),
+            storeStock: Math.round(parseFloat(row['StockOnHand']) || 0),
+            woPo: Math.round((parseFloat(row['AllWO']) || 0) + (parseFloat(row['AllPO']) || 0))
         };
-    }
+    });
     return finalMrpData;
 }
 
